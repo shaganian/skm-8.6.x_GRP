@@ -151,6 +151,11 @@ MEMORY
 
 SECTIONS
 {
+    .app_header :
+    {
+        *(.app_header)
+    } > A_HEADER
+    
     .TI.persistent :
     {
         *(.TI.persistent)

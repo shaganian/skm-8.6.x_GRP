@@ -6,6 +6,38 @@
 #include <stdio.h>
 #include <time.h>
 #include "drivers/microlan.h"
+#include "app_header.h"
+
+extern __interrupt void Port_1(void);
+extern __interrupt void Port_2(void);
+extern __interrupt void Port_3(void);
+extern __interrupt void WDT_ISR(void);
+extern __interrupt void USCI_A0_ISR(void);
+extern __interrupt void USCI_B0_ISR(void);
+extern __interrupt void ADC12ISR(void);
+extern void _c_int00_noargs_mpu(void);
+
+#pragma DATA_SECTION(g_app_header, ".app_header")
+#pragma RETAIN(g_app_header)
+
+const AppHeader g_app_header =
+{
+    APP_HEADER_MAGIC,
+    APP_HEADER_FORMAT_VERSION,
+
+    _c_int00_noargs_mpu,
+
+    Port_1,
+    Port_2,
+    Port_3,
+
+    WDT_ISR,
+
+    USCI_A0_ISR,
+    USCI_B0_ISR,
+
+    ADC12ISR
+};
 
 #define SLAVE_ADDRESS 0x38      // дисплей RDX0154
 #define MCLK_FREQUENCY          1000000

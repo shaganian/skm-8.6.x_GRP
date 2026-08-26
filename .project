@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>skm-8.6.x_GRP</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>com.ti.ccstudio.core.ccsNature</nature>
+		<nature>org.eclipse.cdt.core.cnature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
+		<nature>org.eclipse.cdt.core.ccnature</nature>
+	</natures>
+	<linkedResources>
+		<link>
+			<name>MSP430FR5xx_6xx</name>
+			<type>2</type>
+			<location>/home/skydom/ti/msp/MSP430Ware_3_80_14_01/driverlib/driverlib/MSP430FR5xx_6xx</location>
+		</link>
+	</linkedResources>
+</projectDescription>

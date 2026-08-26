@@ -175,7 +175,7 @@ SECTIONS
 
     .const            : {} >> A_LOW | A_HIGH
 
-    .text:_isr        : {} >> A_LOW | A_HIGH
+    .text:_isr        : {} >> A_LOW
     .text             : {} >> A_HIGH | A_LOW
 
 #ifdef __TI_COMPILER_VERSION__

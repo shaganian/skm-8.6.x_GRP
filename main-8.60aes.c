@@ -1224,7 +1224,7 @@ struct {
     //******************************************************************************
     //*
     // Port 2 interrupt service routine
-    #pragma vector=PORT2_VECTOR
+    //#pragma vector=PORT2_VECTOR
     __interrupt void Port_2(void)
     {
         if(P2IFG & BIT3){                           // Если нажата кнопка P2.3         [ - - * - ]
@@ -1248,7 +1248,7 @@ struct {
     }
 
     // Port 3 interrupt service routine
-    #pragma vector=PORT3_VECTOR
+    //#pragma vector=PORT3_VECTOR
     __interrupt void Port_3(void)
     {
         unsigned char buffer;

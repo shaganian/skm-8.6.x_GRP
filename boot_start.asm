@@ -51,3 +51,34 @@ boot_port1_proxy:
     .word boot_port1_proxy
     
     ; .word Port_1
+
+    .global boot_port2_proxy
+    .global Port_2
+
+    .sect ".boot_proxy"
+    .retain
+
+boot_port2_proxy:
+    BR      #Port_2
+
+
+    .global boot_port3_proxy
+    .global Port_3
+
+    .sect ".boot_proxy"
+    .retain
+
+boot_port3_proxy:
+    BR      #Port_3
+    
+    ; MSP430FR5949 PORT2_VECTOR = .int36 = 0xFFD8
+
+    .sect ".int36"
+    .retain
+    .word boot_port2_proxy
+
+    ; MSP430FR5949 PORT3_VECTOR = .int33 = 0xFFD2
+
+    .sect ".int33"
+    .retain
+    .word boot_port3_proxy

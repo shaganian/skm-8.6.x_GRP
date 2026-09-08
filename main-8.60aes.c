@@ -1563,8 +1563,9 @@ if(P1IES & BIT2){
         }
     }
 
-    #pragma vector=ADC12_VECTOR
-    __interrupt void ADC12ISR (void)
+    #pragma CODE_SECTION(ADC12ISR, ".text:_isr")
+    /* #pragma vector=ADC12_VECTOR */
+    __interrupt void ADC12ISR(void)
     {
         switch(__even_in_range(ADC12IV, ADC12IV_ADC12RDYIFG))
         {
@@ -1638,7 +1639,8 @@ if(P1IES & BIT2){
     //******************************************************************************
     // Интерфейс I2C **************************************************************
     //******************************************************************************
-    #pragma vector = USCI_B0_VECTOR
+    #pragma CODE_SECTION(USCI_B0_ISR, ".text:_isr")
+    /* #pragma vector = USCI_B0_VECTOR */
     __interrupt void USCI_B0_ISR(void)
     {
         //Необходимо прочитать из UCB0RXBUF

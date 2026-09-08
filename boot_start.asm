@@ -115,3 +115,33 @@ boot_usci_a0_proxy:
     .retain
     .word boot_usci_a0_proxy
     
+
+    .global boot_usci_b0_proxy
+    .global USCI_B0_ISR
+
+    .sect ".boot_proxy"
+    .retain
+
+boot_usci_b0_proxy:
+    BR      #USCI_B0_ISR
+
+    ; MSP430FR5949 USCI_B0_VECTOR = .int47 = 0xFFEE
+    .sect ".int47"
+    .retain
+    .word boot_usci_b0_proxy
+    
+
+    .global boot_adc12_proxy
+    .global ADC12ISR
+
+    .sect ".boot_proxy"
+    .retain
+
+boot_adc12_proxy:
+    BR      #ADC12ISR
+
+    ; MSP430FR5949 ADC12_VECTOR = .int46 = 0xFFEC
+    .sect ".int46"
+    .retain
+    .word boot_adc12_proxy
+        

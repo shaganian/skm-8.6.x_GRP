@@ -1301,13 +1301,12 @@ if(P3IES & BIT0){
     }
     // */
     // Port 1 interrupt service routine
-    #pragma vector=PORT1_VECTOR
+    // #pragma vector=PORT1_VECTOR
     __interrupt void Port_1(void)
     {
         //*
         unsigned char buffer;
         unsigned char time_out;
-        //
 
         P2OUT &= ~BIT7;             // BКЛючаем LED
         //

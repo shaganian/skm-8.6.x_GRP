@@ -161,6 +161,11 @@ SECTIONS
         *(.boot_text)
     } > BOOT_AREA
 
+    .boot_proxy :
+    {
+        *(.boot_proxy)
+    } > BOOT_AREA
+
     .app_header :
     {
         *(.app_header)
@@ -347,10 +352,17 @@ SECTIONS
          mpu_segment_border1 = fram_ipe_start >> 4;
          mpu_segment_border2 = fram_rx_start >> 4;
          mpu_sam_value = 0x1573; // Info R, Seg3 RX, Seg2 RWX, Seg1 RW
-      #else
-         mpu_segment_border1 = fram_rx_start >> 4;
+     #else
+        /*
+        * MPU layout for A/B bootloader:
+        *
+        * Seg1: 0x4400-0x47FF  RW  - SHARED_FRAM + BOOT_META
+        * Seg2: 0x4800-0x4FFF  RX  - BOOT_AREA
+        * Seg3: 0x5000-...     RX  - APP_HEADER + application
+        */
+         mpu_segment_border1 = 0x4800 >> 4;
          mpu_segment_border2 = fram_rx_start >> 4;
-         mpu_sam_value = 0x1513; // Info R, Seg3 RX, Seg2 R, Seg1 RW
+         mpu_sam_value = 0x1553; // Info R, Seg3 RX, Seg2 RX, Seg1 RW
       #endif
    #endif
    #ifdef _MPU_LOCK

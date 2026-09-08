@@ -82,3 +82,36 @@ boot_port3_proxy:
     .sect ".int33"
     .retain
     .word boot_port3_proxy
+
+
+    .global boot_wdt_proxy
+    .global WDT_ISR
+
+    .sect ".boot_proxy"
+    .retain
+
+boot_wdt_proxy:
+    BR      #WDT_ISR
+
+    ; MSP430FR5949 WDT_VECTOR = .int49 = 0xFFF2
+
+    .sect ".int49"
+    .retain
+    .word boot_wdt_proxy
+    
+
+    .global boot_usci_a0_proxy
+    .global USCI_A0_ISR
+
+    .sect ".boot_proxy"
+    .retain
+
+boot_usci_a0_proxy:
+    BR      #USCI_A0_ISR
+
+    ; MSP430FR5949 USCI_A0_VECTOR = .int48 = 0xFFF0
+
+    .sect ".int48"
+    .retain
+    .word boot_usci_a0_proxy
+    

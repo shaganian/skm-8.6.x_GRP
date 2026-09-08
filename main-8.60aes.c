@@ -1483,7 +1483,7 @@ if(P1IES & BIT2){
         }
     }
     // Watchdog Timer interrupt service routine
-    #pragma vector=WDT_VECTOR
+    //#pragma vector=WDT_VECTOR
     __interrupt void WDT_ISR(void)
     {
 
@@ -1523,7 +1523,8 @@ if(P1IES & BIT2){
         __bic_SR_register_on_exit(LPM3_bits);       // Выходим из LPM3 после каждого тика WDT
     }
 
-    #pragma vector=USCI_A0_VECTOR
+    #pragma CODE_SECTION(USCI_A0_ISR, ".text:_isr")
+    /* #pragma vector=USCI_A0_VECTOR */
     __interrupt void USCI_A0_ISR(void)
     {
         struct rxM_buf *p;

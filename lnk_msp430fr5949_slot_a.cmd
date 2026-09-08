@@ -151,6 +151,16 @@ MEMORY
 
 SECTIONS
 {
+    .boot_start :
+    {
+        *(.boot_start)
+    } > BOOT_AREA
+
+    .boot_text :
+    {
+        *(.boot_text)
+    } > BOOT_AREA
+
     .app_header :
     {
         *(.app_header)
@@ -264,7 +274,16 @@ SECTIONS
     COMP_E       : { * ( .int52 ) } > INT52 type = VECT_INIT
     UNMI         : { * ( .int53 ) } > INT53 type = VECT_INIT
     SYSNMI       : { * ( .int54 ) } > INT54 type = VECT_INIT
-    .reset       : {}               > RESET  /* MSP430 Reset vector         */
+    .boot_reset_vector :
+    {
+      *(.boot_reset_vector)
+    } > RESET
+
+    /*
+     * Standard TI application reset vector is intentionally not emitted.
+     * Physical RESET is owned by the bootloader.
+     */
+    .reset : {} type = DSECT
 }
 
 /****************************************************************************/

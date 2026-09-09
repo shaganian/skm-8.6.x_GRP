@@ -1,79 +1,79 @@
 //********************************************************************
 //  menu.c
-//  функции для работы с дисплеем rdx0154
+//  С„СѓРЅРєС†РёРё РґР»СЏ СЂР°Р±РѕС‚С‹ СЃ РґРёСЃРїР»РµРµРј rdx0154
 //
 #include <driverlib.h>
 #include "system.h"
-#include "rdx0154.h"        // Утилиты обслуживания LCD и клавиатуры
+#include "rdx0154.h"        // РЈС‚РёР»РёС‚С‹ РѕР±СЃР»СѓР¶РёРІР°РЅРёСЏ LCD Рё РєР»Р°РІРёР°С‚СѓСЂС‹
 
 #define SLAVE_ADDRESS 0x38
 
 //
-extern signed char server;                             // флаг Выбор сервера
+extern signed char server;                             // С„Р»Р°Рі Р’С‹Р±РѕСЂ СЃРµСЂРІРµСЂР°
 //
 u_char LCDbuffer[8][22];
 struct
 {
-    u_char level_1;     // Первый уровень меню
-    u_char level_2;     // Второй уровень
-    u_char level_3;     // Третий уровень
+    u_char level_1;     // РџРµСЂРІС‹Р№ СѓСЂРѕРІРµРЅСЊ РјРµРЅСЋ
+    u_char level_2;     // Р’С‚РѕСЂРѕР№ СѓСЂРѕРІРµРЅСЊ
+    u_char level_3;     // РўСЂРµС‚РёР№ СѓСЂРѕРІРµРЅСЊ
 } menu;
-unsigned char nokeypad;              // наличие клавиатуры: 0-клава есть, 1-нет.
-//extern unsigned char display;        // наличие дисплея:     0-дисплей есть, 1-нет.
-extern struct skm8_packet pack;      // Пакет данных для передачи на сервер.
-extern struct skm8_packet config;      // Пакет данных для передачи на сервер.
+unsigned char nokeypad;              // РЅР°Р»РёС‡РёРµ РєР»Р°РІРёР°С‚СѓСЂС‹: 0-РєР»Р°РІР° РµСЃС‚СЊ, 1-РЅРµС‚.
+//extern unsigned char display;        // РЅР°Р»РёС‡РёРµ РґРёСЃРїР»РµСЏ:     0-РґРёСЃРїР»РµР№ РµСЃС‚СЊ, 1-РЅРµС‚.
+extern struct skm8_packet pack;      // РџР°РєРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РїРµСЂРµРґР°С‡Рё РЅР° СЃРµСЂРІРµСЂ.
+extern struct skm8_packet config;      // РџР°РєРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РїРµСЂРµРґР°С‡Рё РЅР° СЃРµСЂРІРµСЂ.
 extern unsigned long cnters;
-extern uint16_t start_indi;
-extern uint16_t time_transmit; // Глобальный счетчик - передача данных на сервер
-extern uint16_t start_transmit;
+extern volatile uint16_t start_indi;
+extern volatile uint16_t time_transmit; // Р“Р»РѕР±Р°Р»СЊРЅС‹Р№ СЃС‡РµС‚С‡РёРє - РїРµСЂРµРґР°С‡Р° РґР°РЅРЅС‹С… РЅР° СЃРµСЂРІРµСЂ
+extern volatile uint16_t start_transmit;
 extern unsigned char restart;
 //#pragma PERSISTENT(start_init_job)
-extern unsigned char start_init_job;             // флаг "НАЧАТЬ РАБОТУ"
-//extern char eco; // флаг режима работы СКМ8: 1 - экономный режим, 0- Максимальныйный режим
-extern struct rxM_buf RxMbuf;                   // буфер модема
+extern unsigned char start_init_job;             // С„Р»Р°Рі "РќРђР§РђРўР¬ Р РђР‘РћРўРЈ"
+//extern char eco; // С„Р»Р°Рі СЂРµР¶РёРјР° СЂР°Р±РѕС‚С‹ РЎРљРњ8: 1 - СЌРєРѕРЅРѕРјРЅС‹Р№ СЂРµР¶РёРј, 0- РњР°РєСЃРёРјР°Р»СЊРЅС‹Р№РЅС‹Р№ СЂРµР¶РёРј
+extern struct rxM_buf RxMbuf;                   // Р±СѓС„РµСЂ РјРѕРґРµРјР°
 
 //********************************************************************
 char keypadread(void)
-// Находит кнопку и выходит с кодом кнопки.
+// РќР°С…РѕРґРёС‚ РєРЅРѕРїРєСѓ Рё РІС‹С…РѕРґРёС‚ СЃ РєРѕРґРѕРј РєРЅРѕРїРєРё.
 {
     char key;
-    key = 0;                      // Читаем клавиатуру
-    // проверяем наличие дисплея с клавиатурой
+    key = 0;                      // Р§РёС‚Р°РµРј РєР»Р°РІРёР°С‚СѓСЂСѓ
+    // РїСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ РґРёСЃРїР»РµСЏ СЃ РєР»Р°РІРёР°С‚СѓСЂРѕР№
     //
     //GPIO_setAsInputPin(GPIO_PORT_PJ, GPIO_PIN0 + GPIO_PIN1 + GPIO_PIN2 + GPIO_PIN3);
-    //PJDIR = 0xFF ^ (BIT0 | BIT1 | BIT2 | BIT3);     // Устанавливаем выводы PJ.0,1,2,3 направлением на ввод
+    //PJDIR = 0xFF ^ (BIT0 | BIT1 | BIT2 | BIT3);     // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј РІС‹РІРѕРґС‹ PJ.0,1,2,3 РЅР°РїСЂР°РІР»РµРЅРёРµРј РЅР° РІРІРѕРґ
     //
-    __delay_cycles(100);                            // ждем...
+    __delay_cycles(100);                            // Р¶РґРµРј...
     if (PJIN & 0x01)
-    {                        // Если нажата кнопка PJ.0 КН1  [ * - - - ]
-        key |= 0x01;                      // Читаем клавиатуру
+    {                        // Р•СЃР»Рё РЅР°Р¶Р°С‚Р° РєРЅРѕРїРєР° PJ.0 РљРќ1  [ * - - - ]
+        key |= 0x01;                      // Р§РёС‚Р°РµРј РєР»Р°РІРёР°С‚СѓСЂСѓ
     }
     if (PJIN & 0x02)
-    {                        // Если нажата кнопка PJ.1 КН2  [ - * - - ]
-        key |= 0x02;                      // Читаем клавиатуру
+    {                        // Р•СЃР»Рё РЅР°Р¶Р°С‚Р° РєРЅРѕРїРєР° PJ.1 РљРќ2  [ - * - - ]
+        key |= 0x02;                      // Р§РёС‚Р°РµРј РєР»Р°РІРёР°С‚СѓСЂСѓ
     }
     if (P2IN & 0x08)
-    {                        // Если нажата кнопка P2.3 КН3  [ - - * - ]
-        key |= 0x04;                      // Читаем клавиатуру
+    {                        // Р•СЃР»Рё РЅР°Р¶Р°С‚Р° РєРЅРѕРїРєР° P2.3 РљРќ3  [ - - * - ]
+        key |= 0x04;                      // Р§РёС‚Р°РµРј РєР»Р°РІРёР°С‚СѓСЂСѓ
     }
     if (P2IN & 0x10)
-    {                        // Если нажата кнопка P2.4 КН4  [ - - - * ]
-        key |= 0x08;                      // Читаем клавиатуру
+    {                        // Р•СЃР»Рё РЅР°Р¶Р°С‚Р° РєРЅРѕРїРєР° P2.4 РљРќ4  [ - - - * ]
+        key |= 0x08;                      // Р§РёС‚Р°РµРј РєР»Р°РІРёР°С‚СѓСЂСѓ
     }
 
-    return key; // Читаем порт и выходим...
+    return key; // Р§РёС‚Р°РµРј РїРѕСЂС‚ Рё РІС‹С…РѕРґРёРј...
 }
 //*************************************************************************/
-// Процедура Сканирования Клавиатуры
-// при проверке датчиков температуры
-// В режиме ПУЛЬТА
+// РџСЂРѕС†РµРґСѓСЂР° РЎРєР°РЅРёСЂРѕРІР°РЅРёСЏ РљР»Р°РІРёР°С‚СѓСЂС‹
+// РїСЂРё РїСЂРѕРІРµСЂРєРµ РґР°С‚С‡РёРєРѕРІ С‚РµРјРїРµСЂР°С‚СѓСЂС‹
+// Р’ СЂРµР¶РёРјРµ РџРЈР›Р¬РўРђ
 //                          012345678901234567890
-const char level1_str1[] = "1.Номер объекта      ";
-const char level1_str2[] = "2.Режим роботи СКМ-8 ";
-const char level1_str3[] = "3.Рестарт пристрою   ";
-const char level1_str4[] = "4.Перевiрка GSM сигн.";
-//const char level1_str5[] = "5.Калибровка датчиков";
-const char level1_str5[] = "5.Вибiр сервера      ";
+const char level1_str1[] = "1.РќРѕРјРµСЂ РѕР±СЉРµРєС‚Р°      ";         // "1.РќРѕРјРµСЂ РѕР±СЉРµРєС‚Р°      ";
+//const char level1_str2[] = "2.Р РµР¶РёРј СЂРѕР±РѕС‚Рё РЎРљРњ-8 ";         // "2.Р РµР¶РёРј СЂРѕР±РѕС‚Рё РЎРљРњ-8 ";
+const char level1_str3[] = "2.Р РµСЃС‚Р°СЂС‚ РїСЂРёСЃС‚СЂРѕСЋ   ";         // "3.Р РµСЃС‚Р°СЂС‚ РїСЂРёСЃС‚СЂРѕСЋ   ";
+const char level1_str4[] = "3.РџРµСЂРµРІiСЂРєР° GSM СЃРёРіРЅ.";         // "4.РџРµСЂРµРІiСЂРєР° GSM СЃРёРіРЅ.";
+//const char level1_str5[] = "5.РљР°Р»РёР±СЂРѕРІРєР° РґР°С‚С‡РёРєРѕРІ";
+//const char level1_str5[] = "5.Р’РёР±iСЂ СЃРµСЂРІРµСЂР°      ";         // "5.Р’РёР±iСЂ СЃРµСЂРІРµСЂР°      ";
 const char level1_str_[] = "                     ";
 
 void kbd_process(void)
@@ -81,62 +81,64 @@ void kbd_process(void)
     char knop, i;
     unsigned long timer = 0;
     unsigned int tamr; //, arch;
-    unsigned int repl;                // результат сравнения командой cmp_str();
+    unsigned int repl;                // СЂРµР·СѓР»СЊС‚Р°С‚ СЃСЂР°РІРЅРµРЅРёСЏ РєРѕРјР°РЅРґРѕР№ cmp_str();
 
     knop = keypadread();
     //
-    // проверяем наличие дисплея и кнопок
+    // РїСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ РґРёСЃРїР»РµСЏ Рё РєРЅРѕРїРѕРє
     //
     if (knop == 0xFF)
     {
-        nokeypad = 1;         // нет дисплея и кнопок
+        nokeypad = 1;         // РЅРµС‚ РґРёСЃРїР»РµСЏ Рё РєРЅРѕРїРѕРє
         return;
     }
     else
-    {                 // кнопки есть
-        knop &= 0x0F;     // обнуляем старшие разряды
-        nokeypad = 0;       // есть дисплей и кнопки
+    {                 // РєРЅРѕРїРєРё РµСЃС‚СЊ
+        knop &= 0x0F;     // РѕР±РЅСѓР»СЏРµРј СЃС‚Р°СЂС€РёРµ СЂР°Р·СЂСЏРґС‹
+        nokeypad = 0;       // РµСЃС‚СЊ РґРёСЃРїР»РµР№ Рё РєРЅРѕРїРєРё
     }
 
-    i2c_open();                         // * Открываем порт
-    init_LCD();                        // * Инициализируем дисплей
-    clear_LCD(0);                      // * очищаем экран
+    i2c_open();                         // * РћС‚РєСЂС‹РІР°РµРј РїРѕСЂС‚
+    init_LCD();                        // * РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РґРёСЃРїР»РµР№
+    clear_LCD(0);                      // * РѕС‡РёС‰Р°РµРј СЌРєСЂР°РЅ
 
     //                                  012345678901234567890
     //                                  012345678901234567890
-    i2c_SetAddress(0,LINE3);i2c_PutStr("  Для входа в меню  ");
-    i2c_SetAddress(0,LINE4);i2c_PutStr("  отпустите кнопку: ");
-    i2c_SetAddress(0,LINE5);i2c_PutStr("            . О . . ");
+    i2c_SetAddress(0,LINE3);i2c_PutStrUtf8("  Р”Р»СЏ РІС…РѕРґР° РІ РјРµРЅСЋ  ");
+    i2c_SetAddress(0,LINE4);i2c_PutStrUtf8("  РѕС‚РїСѓСЃС‚РёС‚Рµ РєРЅРѕРїРєСѓ: ");
+    i2c_SetAddress(0,LINE5);i2c_PutStrUtf8("            . Рћ . . ");
 
     knop = keypadread() & 0x0F;
 
     if (knop == 0x0D)
-    {                 // Если нажата кнопка ..0.
+    {                 // Р•СЃР»Рё РЅР°Р¶Р°С‚Р° РєРЅРѕРїРєР° ..0.
         timer = 0;
         while (knop != 0x0F)
-        {            // ее нужно отпустить
+        {            // РµРµ РЅСѓР¶РЅРѕ РѕС‚РїСѓСЃС‚РёС‚СЊ
             knop = keypadread();
             timer++;
             if (timer > 80000000)
             {
-                return; // таймер прерывания цикла
+                return; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
             }
         }
 //*
-        P2IFG &= ~BIT3;                 // Чистим флаг прерывания P2.3 IFG
-        P2IE &= ~BIT3;                 // ЗАПРЕЩАЕМ прерывание от P2.3
-        P2IFG &= ~BIT4;                 // Чистим флаг прерывания P2.4 IFG
-        P2IE &= ~BIT4;                 // ЗАПРЕЩАЕМ прерывание от P2.4
+        P2IFG &= ~BIT3;                 // Р§РёСЃС‚РёРј С„Р»Р°Рі РїСЂРµСЂС‹РІР°РЅРёСЏ P2.3 IFG
+        P2IE &= ~BIT3;                 // Р—РђРџР Р•Р©РђР•Рњ РїСЂРµСЂС‹РІР°РЅРёРµ РѕС‚ P2.3
+        P2IFG &= ~BIT4;                 // Р§РёСЃС‚РёРј С„Р»Р°Рі РїСЂРµСЂС‹РІР°РЅРёСЏ P2.4 IFG
+        P2IE &= ~BIT4;                 // Р—РђРџР Р•Р©РђР•Рњ РїСЂРµСЂС‹РІР°РЅРёРµ РѕС‚ P2.4
 
         //                                  012345678901234567890
-        i2c_SetAddress(6, LINE1); i2c_PutStr("Настройки модуля   ");                     // текст на экран
-        i2c_SetAddress(0, LINE2); i2c_PutStr(level1_str1);
-        i2c_SetAddress(0, LINE3); i2c_PutStr(level1_str2);
-        i2c_SetAddress(0, LINE4); i2c_PutStr(level1_str3);
-        i2c_SetAddress(0, LINE5); i2c_PutStr(level1_str4);
-        i2c_SetAddress(0, LINE6); i2c_PutStr(level1_str5);
-        i2c_SetAddress(0, LINE7); i2c_PutStr(level1_str_);
-        i2c_SetAddress(0, LINE8); i2c_PutStr(level1_str_);
+        i2c_SetAddress(6, LINE1); i2c_PutStrUtf8("РќР°СЃС‚СЂРѕР№РєРё РјРѕРґСѓР»СЏ   ");                     // С‚РµРєСЃС‚ РЅР° СЌРєСЂР°РЅ
+        i2c_SetAddress(0, LINE2); i2c_PutStrUtf8(level1_str1);
+        //i2c_SetAddress(0, LINE3); i2c_PutStrUtf8(level1_str2);
+        i2c_SetAddress(0, LINE3); i2c_PutStrUtf8(level1_str3);
+        i2c_SetAddress(0, LINE4); i2c_PutStrUtf8(level1_str4);
+        //i2c_SetAddress(0, LINE6); i2c_PutStrUtf8(level1_str5);
+        i2c_SetAddress(0, LINE5); i2c_PutStrUtf8(level1_str_);
+        i2c_SetAddress(0, LINE6); i2c_PutStrUtf8(level1_str_);
+        i2c_SetAddress(0, LINE7); i2c_PutStrUtf8(level1_str_);
+        i2c_SetAddress(0, LINE8); i2c_PutStrUtf8(level1_str_);
 // */
         menu.level_1 = 0;
 
@@ -151,7 +153,7 @@ void kbd_process(void)
                     ;
 
                 if (knop & 0x02)
-                {  // кнопка "ВНИЗ"
+                {  // РєРЅРѕРїРєР° "Р’РќРР—"
                     if (menu.level_1 >= 5)
                     {
                         menu.level_1 = 1;
@@ -162,7 +164,7 @@ void kbd_process(void)
                     }
                 }
                 if (knop & 0x01)
-                {  // кнопка "ВВЕРХ"
+                {  // РєРЅРѕРїРєР° "Р’Р’Р•Р РҐ"
                     if (menu.level_1 <= 1)
                     {
                         menu.level_1 = 5;
@@ -173,141 +175,67 @@ void kbd_process(void)
                     }
                 }
                 if (knop & 0x04)
-                {  // кнопка "ВВОД" или переход на следующий уровень меню
+                {  // РєРЅРѕРїРєР° "Р’Р’РћР”" РёР»Рё РїРµСЂРµС…РѕРґ РЅР° СЃР»РµРґСѓСЋС‰РёР№ СѓСЂРѕРІРµРЅСЊ РјРµРЅСЋ
                     if (menu.level_1 == 1)
                     {
 
-                        input_4_digit(pack.addr);             // 1.Номер объекта
+                        input_4_digit(pack.addr);             // 1.РќРѕРјРµСЂ РѕР±СЉРµРєС‚Р°
 
                     }
-/*                    if (menu.level_1 == 2)
-                    {
-
-                        if (eco == 0)
-                        {
-                            i2c_SetAddress(0, LINE1);
-                            i2c_PutStr("Сейчас режим Макс.");
-                        }
-                        if (eco == 1)
-                        {
-                            i2c_SetAddress(0, LINE1);
-                            i2c_PutStr("Сейчас режим Эконом.");
-                        }
-                        i2c_SetAddress(0, LINE2);
-                        i2c_PutStr(level1_str_);
-                        i2c_SetAddress(0, LINE3);
-                        i2c_PutStr("Чтобы изменить режим,");
-                        i2c_SetAddress(0, LINE4);
-                        i2c_PutStr("жмите на стрелки:    ");
-                        i2c_SetAddress(0, LINE6);
-                        i2c_PutStr("Экономный режим   = %");  // текст на экран
-                        i2c_SetAddress(0, LINE7);
-                        i2c_PutStr("Максимальный режим= &");  // текст на экран
-                        //i2c_SetAddress(0,LINE7); i2c_PutStr(level1_str_);
-                        i2c_SetAddress(0, LINE8);
-                        i2c_PutStr(level1_str_);
-                        while (1)
-                        {
-                            knop = ~keypadread() & 0x0F;
-                            if (knop & 0x08)
-                            {
-                                clear_LCD(0);          // заливка - чистим экран
-                                break;
-                            }
-                            if (knop & 0x01)
-                            {
-                                eco = 1;
-                                break;
-                            }
-                            if (knop & 0x02)
-                            {
-                                eco = 0;
-                                break;
-                            }
-                        }
-                        i2c_SetAddress(0, LINE3);
-                        i2c_PutStr(level1_str_);
-                        i2c_SetAddress(0, LINE4);
-                        i2c_PutStr(level1_str_);
-                        if (eco == 1)
-                        {
-                            i2c_SetAddress(0, LINE8);
-                            i2c_PutStr("  Экономный режим ");  // текст на экран
-                        }
-                        if (eco == 0)
-                        {
-                            i2c_SetAddress(0, LINE8);
-                            i2c_PutStr("  Полный режим    ");  // текст на экран
-                        }
-                        __delay_cycles(2000000);  // обязательно подождать!!!
-                    }
-// */
                     if (menu.level_1 == 3)
                     {
 
-                        time_transmit = 65500; // Устанавливаем максимально возможное значение счетчика
-                        start_transmit = 1; // Устанавливаем флаг "Начать передачу"
+                        time_transmit = 65500; // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј РјР°РєСЃРёРјР°Р»СЊРЅРѕ РІРѕР·РјРѕР¶РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ СЃС‡РµС‚С‡РёРєР°
+                        start_transmit = 1; // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј С„Р»Р°Рі "РќР°С‡Р°С‚СЊ РїРµСЂРµРґР°С‡Сѓ"
                         restart = 1;
-                        clear_LCD(0);                  // заливка - чистим экран
+                        clear_LCD(0);                  // Р·Р°Р»РёРІРєР° - С‡РёСЃС‚РёРј СЌРєСЂР°РЅ
                         //                                  012345678901234567890
                         i2c_SetAddress(6, LINE4);
-                        i2c_PutStr(" Рестарт пристрою! ");   // текст на экран
-                        __delay_cycles(2000000);  // обязательно подождать!!!
+                        i2c_PutStrUtf8(" Р РµСЃС‚Р°СЂС‚ РїСЂРёСЃС‚СЂРѕСЋ! ");   // С‚РµРєСЃС‚ РЅР° СЌРєСЂР°РЅ
+                        __delay_cycles(2000000);  // РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ РїРѕРґРѕР¶РґР°С‚СЊ!!!
 
-                        P2IFG &= ~BIT3;       // Чистим флаг прерывания P2.3 IFG
-                        P2IFG &= ~BIT4;       // Чистим флаг прерывания P2.4 IFG
-                        P2IE |= BIT3 | BIT4; // Разрешаем прерывание от P2.3 и P2.4
+                        P2IFG &= ~BIT3;       // Р§РёСЃС‚РёРј С„Р»Р°Рі РїСЂРµСЂС‹РІР°РЅРёСЏ P2.3 IFG
+                        P2IFG &= ~BIT4;       // Р§РёСЃС‚РёРј С„Р»Р°Рі РїСЂРµСЂС‹РІР°РЅРёСЏ P2.4 IFG
+                        P2IE |= BIT3 | BIT4; // Р Р°Р·СЂРµС€Р°РµРј РїСЂРµСЂС‹РІР°РЅРёРµ РѕС‚ P2.3 Рё P2.4
                         return;
 
                     }
                     if (menu.level_1 == 4)
                     {
                         //*
-                        clear_LCD(0);                      // * очищаем экран
+                        clear_LCD(0);                      // * РѕС‡РёС‰Р°РµРј СЌРєСЂР°РЅ
                         tamr = 0;
                         i2c_SetAddress(1, LINE2);
-                        i2c_PutStr("Перевiрка GSM сигналу");    // текст на экран
+                        i2c_PutStrUtf8("РџРµСЂРµРІiСЂРєР° GSM СЃРёРіРЅР°Р»Сѓ");    // С‚РµРєСЃС‚ РЅР° СЌРєСЂР°РЅ
                         //
-                        // Настраиваем UART
+                        // РќР°СЃС‚СЂР°РёРІР°РµРј UART
                         //
                         i2c_SetAddress(50 + tamr, LINE4);
-                        i2c_PutStr("ждем.");
+                        i2c_PutStrUtf8("Р¶РґРµРјРѕ.");
                         init_uart0();
                         i2c_SetAddress(50 + tamr, LINE4);
-                        i2c_PutStr("ждем..");
+                        i2c_PutStrUtf8("Р¶РґРµРјРѕ..");
                         //
-                        // инициализируем модем
+                        // РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РјРѕРґРµРј
                         //
-                        init_sim900();
+                        init_sim800c();
                         i2c_SetAddress(50 + tamr, LINE4);
-                        i2c_PutStr("ждем...");
+                        i2c_PutStrUtf8("Р¶РґРµРј0...");
                         while (1)
                         {
                             //
-                            // Проверяем силу сигнала              //////////////////////////////////////////
+                            // РџСЂРѕРІРµСЂСЏРµРј СЃРёР»Сѓ СЃРёРіРЅР°Р»Р°              //////////////////////////////////////////
                             //
                             //for(i=0; i< 500; i++) RxMbuf.buf[i] = 0;
                             RxMbuf.ind = 0;
-                            // Отправляем пакет на передаче
+                            // РћС‚РїСЂР°РІР»СЏРµРј РїР°РєРµС‚ РЅР° РїРµСЂРµРґР°С‡Рµ
                             Send_from_UART0("AT+CSQ\r\n");
                             repl = wait_compl("+CSQ:", &RxMbuf.buf[0], 1000);
 
-                            for (i = 0; i < 5; i++)
+                            if (!parse_csq_from_rx(repl))
                             {
-                                //for(i=5; i>0; i--){
-                                if ((RxMbuf.buf[repl + i + 2] == 0x0d)
-                                        || (RxMbuf.buf[repl + i + 2] == 0x0a))
-                                {
-                                    pack.csq[i] = '0';
-                                    break;
-                                }
-                                if (RxMbuf.buf[repl + i + 2] == ',')
-                                {
-                                    pack.csq[i] = '.';
-                                }
-                                pack.csq[i] = RxMbuf.buf[repl + i + 2]; // и сохраняем в буфере качества сигнала
+                                for (i = 0; i < 5; i++) pack.csq[i] = '0';
                             }
-                            pack.csq[i] = ' ';
 
                             i2c_SetAddress(50 + tamr, LINE4);
                             i2c_PutStr("       ");
@@ -315,8 +243,8 @@ void kbd_process(void)
                             i2c_PutStr("c:");
                             i2c_PutMultySimb((const char*) &pack.csq, 5);
                             //
-                            __delay_cycles(1000000);           // ждем 1 секунду
-                            // сдвигаемо вивід результату на tamr позицій
+                            __delay_cycles(1000000);           // Р¶РґРµРј 1 СЃРµРєСѓРЅРґСѓ
+                            // СЃРґРІРёРіР°РµРјРѕ РІРёРІС–Рґ СЂРµР·СѓР»СЊС‚Р°С‚Сѓ РЅР° tamr РїРѕР·РёС†С–Р№
                             if (tamr < 14)
                                 tamr++;
                             else
@@ -324,8 +252,8 @@ void kbd_process(void)
 
                             knop = ~keypadread() & 0x0F;
                             if (knop & 0x08)
-                            {      // кнопка "МЕНЮ" или выход на верхний уровень
-                                clear_LCD(0);          // заливка - чистим экран
+                            {      // РєРЅРѕРїРєР° "РњР•РќР®" РёР»Рё РІС‹С…РѕРґ РЅР° РІРµСЂС…РЅРёР№ СѓСЂРѕРІРµРЅСЊ
+                                clear_LCD(0);          // Р·Р°Р»РёРІРєР° - С‡РёСЃС‚РёРј СЌРєСЂР°РЅ
                                 while (keypadread() != 0x0F)
                                     ;
                                 break;
@@ -334,145 +262,74 @@ void kbd_process(void)
 
                         // */
                     }
-                    if(menu.level_1 == 5){                                    // "7.Вибор сервера      "
-
-                                clear_LCD(0);                                         // заливка - чистим экран
-                        if(server == 0){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер СКАЙДОМ     ");
-                        }
-                        if(server == 1){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер КременчукГаз");
-                        }
-                        if(server == 2){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер ХерсонГаз   ");
-                        }
-                        if(server == 3){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Серв. КiровоградГаз");
-                        }
-                        i2c_SetAddress(0,LINE2);i2c_PutStr(level1_str_);
-                        i2c_SetAddress(0,LINE3);i2c_PutStr("Щоб змiнити сервер,");
-                        i2c_SetAddress(0,LINE4);i2c_PutStr("жмiть на стрiлку:     ");
-                        i2c_SetAddress(0,LINE5);i2c_PutStr("         Вверх = [,   ");  // текст на экран
-                        i2c_SetAddress(0,LINE6);i2c_PutStr("потiм Вихiд-права КН.");  // текст на экран
-                        i2c_SetAddress(0,LINE7); i2c_PutStr(level1_str_);
-                        i2c_SetAddress(0,LINE8); i2c_PutStr(level1_str_);
-                        while(1){
-
-                          knop = ~keypadread() & 0x0F;
-                          if(knop){
-                                while(keypadread() != 0x0F);
-
-                            if(knop & 0x08){
-                                clear_LCD(0);                                         // заливка - чистим экран
-                                break;
-                            }
-                            if(knop & 0x01){
-                                server++;
-                                if(server > 3)server=0;
-                                //break;
-                            }
-                            if(knop & 0x02){
-                            //    server--;
-                            //    if(server < 0)server=3;
-                                //break;
-                            }
-                            if(server == 0){
-                                i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер СКАЙДОМ     ");
-                            }
-                            if(server == 1){
-                                i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер КременчукГаз");
-                            }
-                            if(server == 2){
-                                i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер ХерсонГаз   ");
-                            }
-                            if(server == 3){
-                                i2c_SetAddress(0,LINE1);i2c_PutStr("Серв. КiровоградГаз");
-                            }
-                            knop=0;
-                          }
-                            __delay_cycles(1000000);  // обязательно подождать!!!
-                        }
-                        i2c_SetAddress(0,LINE3); i2c_PutStr(level1_str_);
-                        i2c_SetAddress(0,LINE4); i2c_PutStr(level1_str_);
-                        if(server == 0){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер СКАЙДОМ     ");
-                        }
-                        if(server == 1){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер КременчукГаз");
-                        }
-                        if(server == 2){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Сервер ХерсонГаз   ");
-                        }
-                        if(server == 3){
-                          i2c_SetAddress(0,LINE1);i2c_PutStr("Серв. КiровоградГаз");
-                        }
-                        __delay_cycles(1000000);  // обязательно подождать!!!
-                    }
-                }
+               }
                 if (knop & 0x08)
-                {  // кнопка "МЕНЮ" или выход на верхний уровень
-                    clear_LCD(0);                      // заливка - чистим экран
+                {  // РєРЅРѕРїРєР° "РњР•РќР®" РёР»Рё РІС‹С…РѕРґ РЅР° РІРµСЂС…РЅРёР№ СѓСЂРѕРІРµРЅСЊ
+                    clear_LCD(0);                      // Р·Р°Р»РёРІРєР° - С‡РёСЃС‚РёРј СЌРєСЂР°РЅ
                     //
-                    // предустанавливаем конфигурацию:
+                    // РїСЂРµРґСѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ:
                     //
                     //for (i = 5; i > 0; i--)
                     for(i=0; i<5; i++)
                     {
                         pack.addr[i] = config.addr[i];
-                    }  // char addr[4];   // Адрес устройства в системе - "19999"
-                    // for(i=0; i<9; i++){pack.cnt1[i] = config.cnt1[i];}  // char cnt1[9];   // счетчик импульсов - "00054321"
-                    // for(i=0; i<4; i++){pack.type[i] = config.type[i];}  // char type[4];   // тип устройства - идентификатор "0008"
-                    //for(i=0; i<6; i++)
-                    for (i = 6; i > 0; i--)
+                    }  // char addr[4];   // РђРґСЂРµСЃ СѓСЃС‚СЂРѕР№СЃС‚РІР° РІ СЃРёСЃС‚РµРјРµ - "19999"
+                    // for(i=0; i<9; i++){pack.cnt1[i] = config.cnt1[i];}  // char cnt1[9];   // СЃС‡РµС‚С‡РёРє РёРјРїСѓР»СЊСЃРѕРІ - "00054321"
+                    // for(i=0; i<4; i++){pack.type[i] = config.type[i];}  // char type[4];   // С‚РёРї СѓСЃС‚СЂРѕР№СЃС‚РІР° - РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ "0008"
+                    //for(i=0; i<5; i++)
+                    for (i = 0; i < 6; i++)
                     {
                         pack.time[i] = config.time[i];
-                    } // char time[6];   //Период между передачами на сервер - "43200"
+                    } // char time[6];   //РџРµСЂРёРѕРґ РјРµР¶РґСѓ РїРµСЂРµРґР°С‡Р°РјРё РЅР° СЃРµСЂРІРµСЂ - "43200"
 
-                    start_indi = 1;     // Устанавливаем флаг "Начать индикацию"
+                    start_indi = 1;     // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј С„Р»Р°Рі "РќР°С‡Р°С‚СЊ РёРЅРґРёРєР°С†РёСЋ"
 
-                    P2IFG &= ~BIT3;           // Чистим флаг прерывания P2.3 IFG
-                    P2IFG &= ~BIT4;           // Чистим флаг прерывания P2.4 IFG
-                    P2IE |= BIT3 | BIT4;  // Разрешаем прерывание от P2.3 и P2.4
+                    P2IFG &= ~BIT3;           // Р§РёСЃС‚РёРј С„Р»Р°Рі РїСЂРµСЂС‹РІР°РЅРёСЏ P2.3 IFG
+                    P2IFG &= ~BIT4;           // Р§РёСЃС‚РёРј С„Р»Р°Рі РїСЂРµСЂС‹РІР°РЅРёСЏ P2.4 IFG
+                    P2IE |= BIT3 | BIT4;  // Р Р°Р·СЂРµС€Р°РµРј РїСЂРµСЂС‹РІР°РЅРёРµ РѕС‚ P2.3 Рё P2.4
                     return;
                 }
 
-                i2c_SetAddress(0, LINE2);  // Первая строка меню
-                if (menu.level_1 == 1){i2c_PutStr_inv(level1_str1);}
-                else{i2c_PutStr(level1_str1);}
+                i2c_SetAddress(0, LINE2);  // РџРµСЂРІР°СЏ СЃС‚СЂРѕРєР° РјРµРЅСЋ
+                if (menu.level_1 == 1){i2c_PutStrUtf8_inv(level1_str1);}
+                else{i2c_PutStrUtf8(level1_str1);}
+/*
+                i2c_SetAddress(0, LINE3);  // Р’С‚РѕСЂР°СЏ СЃС‚СЂРѕРєР° РјРµРЅСЋ
+                if (menu.level_1 == 2){i2c_PutStrUtf8_inv(level1_str2);}
+                else{i2c_PutStrUtf8(level1_str2);}
+*/
+                i2c_SetAddress(0, LINE3);  // Р’С‚РѕСЂР°СЏ СЃС‚СЂРѕРєР° РјРµРЅСЋ
+                if (menu.level_1 == 3){i2c_PutStrUtf8_inv(level1_str3);}
+                else{i2c_PutStrUtf8(level1_str3);}
 
-                i2c_SetAddress(0, LINE3);  // Вторая строка меню
-                if (menu.level_1 == 2){i2c_PutStr_inv(level1_str2);}
-                else{i2c_PutStr(level1_str2);}
-
-                i2c_SetAddress(0, LINE4);  // Вторая строка меню
-                if (menu.level_1 == 3){i2c_PutStr_inv(level1_str3);}
-                else{i2c_PutStr(level1_str3);}
-
-                i2c_SetAddress(0, LINE5);  // Вторая строка меню
-                if (menu.level_1 == 4){i2c_PutStr_inv(level1_str4);}
-                else{i2c_PutStr(level1_str4);}
-
-                i2c_SetAddress(0,LINE6);  // Вторая строка меню
-                if(menu.level_1 == 5){i2c_PutStr_inv(level1_str5);}
-                else{i2c_PutStr(level1_str5);
+                i2c_SetAddress(0, LINE4);  // Р’С‚РѕСЂР°СЏ СЃС‚СЂРѕРєР° РјРµРЅСЋ
+                if (menu.level_1 == 4){i2c_PutStrUtf8_inv(level1_str4);}
+                else{i2c_PutStrUtf8(level1_str4);}
+/*
+                i2c_SetAddress(0,LINE6);  // Р’С‚РѕСЂР°СЏ СЃС‚СЂРѕРєР° РјРµРЅСЋ
+                if(menu.level_1 == 5){i2c_PutStrUtf8_inv(level1_str5);}
+                else{i2c_PutStrUtf8(level1_str5);
                 }
-                i2c_SetAddress(0, LINE7); i2c_PutStr(level1_str_);
-                i2c_SetAddress(0, LINE8); i2c_PutStr(level1_str_);
+*/
+                i2c_SetAddress(0, LINE5); i2c_PutStrUtf8(level1_str_);
+                i2c_SetAddress(0, LINE6); i2c_PutStrUtf8(level1_str_);
+                i2c_SetAddress(0, LINE7); i2c_PutStrUtf8(level1_str_);
+                i2c_SetAddress(0, LINE8); i2c_PutStrUtf8(level1_str_);
             }
-            __delay_cycles(8000);  // обязательно подождать!!!
+            __delay_cycles(8000);  // РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ РїРѕРґРѕР¶РґР°С‚СЊ!!!
         }
 
     }
 }
 /*
  ********************************************************************************
- *    Функция чистит буфер памяти LCD
- * Описание   :
- * Аргументы  : row    - номер строки дисплея(от 1 до 4)
- *            : col    - номер колонки в строке(от 1 до 20)
- *            : string - строка текста
- * Returns    : нет
- * Примечание :
+ *    Р¤СѓРЅРєС†РёСЏ С‡РёСЃС‚РёС‚ Р±СѓС„РµСЂ РїР°РјСЏС‚Рё LCD
+ * РћРїРёСЃР°РЅРёРµ   :
+ * РђСЂРіСѓРјРµРЅС‚С‹  : row    - РЅРѕРјРµСЂ СЃС‚СЂРѕРєРё РґРёСЃРїР»РµСЏ(РѕС‚ 1 РґРѕ 4)
+ *            : col    - РЅРѕРјРµСЂ РєРѕР»РѕРЅРєРё РІ СЃС‚СЂРѕРєРµ(РѕС‚ 1 РґРѕ 20)
+ *            : string - СЃС‚СЂРѕРєР° С‚РµРєСЃС‚Р°
+ * Returns    : РЅРµС‚
+ * РџСЂРёРјРµС‡Р°РЅРёРµ :
  ********************************************************************************
  */
 void LCDcls(void)
@@ -489,24 +346,24 @@ void LCDcls(void)
 }
 
 //*************************************************************************/
-// Процедура Настройки номера объекта
+// РџСЂРѕС†РµРґСѓСЂР° РќР°СЃС‚СЂРѕР№РєРё РЅРѕРјРµСЂР° РѕР±СЉРµРєС‚Р°
 //
-const char level21_str1[] = "  1.Номер объекта   ";
-const char level21_str2[] = "Значение 00000-99999";
-const char level21_str4[] = "                    ";
+const char level21_str1[] = "  1.РќРѕРјРµСЂ РѕР±СЉРµРєС‚Р°    ";
+const char level21_str2[] = " Р—РЅР°С‡РµРЅРёРµ 00000-99999";
+const char level21_str4[] = "                     ";
 
 void input_4_digit(char *fourdigit)
 {
     unsigned char knop = 0;
     unsigned int mark = 0, i;
 
-    init_LCD();                                // Инициализируем дисплей RDX0154
-    clear_LCD(0);                               // заливка - чистим экран
-    LCDcls();                                   // чистим буфер LCD
+    init_LCD();                                // РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РґРёСЃРїР»РµР№ RDX0154
+    clear_LCD(0);                               // Р·Р°Р»РёРІРєР° - С‡РёСЃС‚РёРј СЌРєСЂР°РЅ
+    LCDcls();                                   // С‡РёСЃС‚РёРј Р±СѓС„РµСЂ LCD
     i2c_SetAddress(0, LINE2);
-    i2c_PutStr(level21_str1);
+    i2c_PutStrUtf8(level21_str1);
     i2c_SetAddress(0, LINE3);
-    i2c_PutStr(level21_str2);
+    i2c_PutStrUtf8(level21_str2);
     i2c_SetAddress(42, LINE5);
     i2c_PutStr_inv("u=");
 
@@ -518,12 +375,12 @@ void input_4_digit(char *fourdigit)
     i2c_writeChar_inv(config.addr[4]);
 
     i2c_SetAddress(57, LINE6);
-    i2c_writeChar('[');  // подробности в файле Font5x7.h, строки 99-101
+    i2c_writeChar('[');  // РїРѕРґСЂРѕР±РЅРѕСЃС‚Рё РІ С„Р°Р№Р»Рµ Font5x7.h, СЃС‚СЂРѕРєРё 99-101
     /*
-     Символы размещаются в буфере LCDbuffer[3][9] следующим образом:
-     ячейки     [3][9] [3][10] [3][11] [3][12]
-     цифры    ст.  1       2       3       4   мл.
-     маркер        =                           // mark сначала становится около старшего разряда
+     РЎРёРјРІРѕР»С‹ СЂР°Р·РјРµС‰Р°СЋС‚СЃСЏ РІ Р±СѓС„РµСЂРµ LCDbuffer[3][9] СЃР»РµРґСѓСЋС‰РёРј РѕР±СЂР°Р·РѕРј:
+     СЏС‡РµР№РєРё     [3][9] [3][10] [3][11] [3][12]
+     С†РёС„СЂС‹    СЃС‚.  1       2       3       4   РјР».
+     РјР°СЂРєРµСЂ        =                           // mark СЃРЅР°С‡Р°Р»Р° СЃС‚Р°РЅРѕРІРёС‚СЃСЏ РѕРєРѕР»Рѕ СЃС‚Р°СЂС€РµРіРѕ СЂР°Р·СЂСЏРґР°
      */
 
     //menu.level_2 = 0;
@@ -537,42 +394,42 @@ void input_4_digit(char *fourdigit)
                 ;
 
             if (knop & 0x01)
-            {  // кнопка "ВВЕРХ"
+            {  // РєРЅРѕРїРєР° "Р’Р’Р•Р РҐ"
 
-                config.addr[0 + mark]++; // увеличиваем число в текущем разряде
+                config.addr[0 + mark]++; // СѓРІРµР»РёС‡РёРІР°РµРј С‡РёСЃР»Рѕ РІ С‚РµРєСѓС‰РµРј СЂР°Р·СЂСЏРґРµ
                 if (config.addr[0 + mark] > '9')
                 {
-                    config.addr[0 + mark] = '0'; // следим за десятичной системой
+                    config.addr[0 + mark] = '0'; // СЃР»РµРґРёРј Р·Р° РґРµСЃСЏС‚РёС‡РЅРѕР№ СЃРёСЃС‚РµРјРѕР№
                 }
                 i2c_SetAddress((56 + (mark * 6)), LINE5);
-                i2c_writeChar(config.addr[0 + mark]); // подробности в файле Font5x7.h, строки 99-101
+                i2c_writeChar(config.addr[0 + mark]); // РїРѕРґСЂРѕР±РЅРѕСЃС‚Рё РІ С„Р°Р№Р»Рµ Font5x7.h, СЃС‚СЂРѕРєРё 99-101
             }
             if (knop & 0x02)
-            {  // кнопка "ВНИЗ"
+            {  // РєРЅРѕРїРєР° "Р’РќРР—"
 
-                config.addr[0 + mark]--; // увеличиваем число в текущем разряде
+                config.addr[0 + mark]--; // СѓРІРµР»РёС‡РёРІР°РµРј С‡РёСЃР»Рѕ РІ С‚РµРєСѓС‰РµРј СЂР°Р·СЂСЏРґРµ
                 if (config.addr[0 + mark] < '0')
                 {
-                    config.addr[0 + mark] = '9'; // следим за десятичной системой
+                    config.addr[0 + mark] = '9'; // СЃР»РµРґРёРј Р·Р° РґРµСЃСЏС‚РёС‡РЅРѕР№ СЃРёСЃС‚РµРјРѕР№
                 }
                 i2c_SetAddress((56 + (mark * 6)), LINE5);
-                i2c_writeChar(config.addr[0 + mark]); // подробности в файле Font5x7.h, строки 99-101
+                i2c_writeChar(config.addr[0 + mark]); // РїРѕРґСЂРѕР±РЅРѕСЃС‚Рё РІ С„Р°Р№Р»Рµ Font5x7.h, СЃС‚СЂРѕРєРё 99-101
             }
             if (knop & 0x04)
-            {  // кнопка "ВВОД" или переход на следующий уровень меню
+            {  // РєРЅРѕРїРєР° "Р’Р’РћР”" РёР»Рё РїРµСЂРµС…РѕРґ РЅР° СЃР»РµРґСѓСЋС‰РёР№ СѓСЂРѕРІРµРЅСЊ РјРµРЅСЋ
 
                 mark++;
                 i2c_SetAddress(0, LINE6);
-                i2c_PutStr(level21_str4);  // чистим строку
+                i2c_PutStrUtf8(level21_str4);  // С‡РёСЃС‚РёРј СЃС‚СЂРѕРєСѓ
                 if (mark == 5)
                 {
                     mark = 0;
                 }
                 i2c_SetAddress((57 + (mark * 6)), LINE6);
-                i2c_writeChar('['); // подробности в файле Font5x7.h, строки 99-101
+                i2c_writeChar('['); // РїРѕРґСЂРѕР±РЅРѕСЃС‚Рё РІ С„Р°Р№Р»Рµ Font5x7.h, СЃС‚СЂРѕРєРё 99-101
             }
             if (knop & 0x08)
-            {  // кнопка "МЕНЮ" или выход на верхний уровень
+            {  // РєРЅРѕРїРєР° "РњР•РќР®" РёР»Рё РІС‹С…РѕРґ РЅР° РІРµСЂС…РЅРёР№ СѓСЂРѕРІРµРЅСЊ
 
                 //for (i = 5; i > 0; i--)
                 for(i=0; i<5; i++)
@@ -582,75 +439,11 @@ void input_4_digit(char *fourdigit)
                 return;
             }
         }
-        __delay_cycles(15000);   // обязательно подождать!!!
+        __delay_cycles(15000);   // РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ РїРѕРґРѕР¶РґР°С‚СЊ!!!
     }
 }
 //*************************************************************************/
-// Процедура Установки значения счетчика
+// РџСЂРѕС†РµРґСѓСЂР° РЈСЃС‚Р°РЅРѕРІРєРё Р·РЅР°С‡РµРЅРёСЏ СЃС‡РµС‚С‡РёРєР°
 //
-const char level31_str1[] = " 1.Значение счетчика ";
-const char level31_str2[] = "   00000000-99999999 ";
-
-void input_8_digit(char *fourdigit)
-{
-    unsigned char knop = 0;
-    unsigned char mark = 0;
-
-    init_LCD();                                // Инициализируем дисплей RDX0154
-    clear_LCD(0);                               // заливка - чистим экран
-    LCDcls();                                   // чистим буфер LCD
-    i2c_SetAddress(0, LINE2);
-    i2c_PutStr(level31_str1);
-    i2c_SetAddress(0, LINE3);
-    i2c_PutStr(level31_str2);
-    i2c_SetAddress(8, LINE5);
-    i2c_PutStr("счетчик=");
-    i2c_SetAddress(57, LINE6);
-    i2c_writeChar('[');  // подробности в файле Font5x7.h, строки 99-101
-    /*
-     Символы размещаются в буфере LCDbuffer[3][9] следующим образом:
-     ячейки     [3][9] [3][10] [3][11] [3][12]
-     цифры    ст.  1       2       3       4   мл.
-     маркер        =                           // mark сначала становится около старшего разряда
-     */
-
-    //menu.level_2 = 0;
-//--------------------------------------->01234567890123456789
-    while (1)
-    {
-        knop = ~keypadread() & 0x0F;
-        if (knop)
-        {
-            while (keypadread() != 0x0F)
-                ;
-
-            if (knop & 0x01)
-            {  // кнопка "ВВЕРХ"
-            }
-            if (knop & 0x02)
-            {  // кнопка "ВНИЗ"
-            }
-            if (knop & 0x04)
-            {  // кнопка "ВВОД" или переход на следующий уровень меню
-
-                mark++;
-                i2c_SetAddress(0, LINE6);
-                i2c_PutStr(level21_str4);  // чистим строку
-                if (mark == 8)
-                {
-                    mark = 0;
-                }
-                i2c_SetAddress((57 + (mark * 6)), LINE6);
-                i2c_writeChar('['); // подробности в файле Font5x7.h, строки 99-101
-            }
-            if (knop & 0x08)
-            {  // кнопка "МЕНЮ" или выход на верхний уровень
-                clear_LCD(0);                          // заливка - чистим экран
-                LCDcls();                                   // чистим буфер LCD
-
-                return;
-            }
-        }
-        __delay_cycles(15000);   // обязательно подождать!!!
-    }
-}
+//const char level31_str1[] = " 1.Р—РЅР°С‡РµРЅРёРµ СЃС‡РµС‚С‡РёРєР° ";
+//const char level31_str2[] = "   00000000-99999999 ";  // "   00000000-99999999 "

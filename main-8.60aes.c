@@ -1224,7 +1224,7 @@ struct {
     //******************************************************************************
     //*
     // Port 2 interrupt service routine
-    //#pragma vector=PORT2_VECTOR
+    #pragma CODE_SECTION(Port_2, ".text:_isr")
     __interrupt void Port_2(void)
     {
         if(P2IFG & BIT3){                           // Если нажата кнопка P2.3         [ - - * - ]
@@ -1248,7 +1248,7 @@ struct {
     }
 
     // Port 3 interrupt service routine
-    //#pragma vector=PORT3_VECTOR
+    #pragma CODE_SECTION(Port_3, ".text:_isr")
     __interrupt void Port_3(void)
     {
         unsigned char buffer;
@@ -1301,7 +1301,7 @@ if(P3IES & BIT0){
     }
     // */
     // Port 1 interrupt service routine
-    // #pragma vector=PORT1_VECTOR
+    #pragma CODE_SECTION(Port_1, ".text:_isr")
     __interrupt void Port_1(void)
     {
         //*
@@ -1483,7 +1483,7 @@ if(P1IES & BIT2){
         }
     }
     // Watchdog Timer interrupt service routine
-    //#pragma vector=WDT_VECTOR
+    #pragma CODE_SECTION(WDT_ISR, ".text:_isr")
     __interrupt void WDT_ISR(void)
     {
 

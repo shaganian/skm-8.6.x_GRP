@@ -1,25 +1,25 @@
 //********************************************************************
 //  rdx0154.c
-//  функции для работы с дисплеем rdx0154
+//  С„СѓРЅРєС†РёРё РґР»СЏ СЂР°Р±РѕС‚С‹ СЃ РґРёСЃРїР»РµРµРј rdx0154
 //
 //--------------------------------------------------------------------
 //
 //#include "driverlib/MSP430FR5xx_6xx/driverlib.h"
 #include <driverlib.h>
 #include "system.h"
-#include "rdx0154.h"        // Утилиты обслуживания LCD и клавиатуры
+#include "rdx0154.h"        // РЈС‚РёР»РёС‚С‹ РѕР±СЃР»СѓР¶РёРІР°РЅРёСЏ LCD Рё РєР»Р°РІРёР°С‚СѓСЂС‹
 #include "font5x7.h"
 #include "Font5x7_ru.h"
 
 #define SLAVE_ADDRESS 0x38
 
-//extern unsigned char nokeypad;          // наличие клавиатуры: 0-клава есть, 1-нет.
-extern unsigned char display;        // наличие дисплея:     1-дисплей есть, 0-нет.
-extern unsigned char indi;                          // разрешить индикацию
-extern struct rxM_buf RxMbuf;                       // буфер модема
+//extern unsigned char nokeypad;          // РЅР°Р»РёС‡РёРµ РєР»Р°РІРёР°С‚СѓСЂС‹: 0-РєР»Р°РІР° РµСЃС‚СЊ, 1-РЅРµС‚.
+extern unsigned char display;        // РЅР°Р»РёС‡РёРµ РґРёСЃРїР»РµСЏ:     1-РґРёСЃРїР»РµР№ РµСЃС‚СЊ, 0-РЅРµС‚.
+extern unsigned char indi;                          // СЂР°Р·СЂРµС€РёС‚СЊ РёРЅРґРёРєР°С†РёСЋ
+extern struct rxM_buf RxMbuf;                       // Р±СѓС„РµСЂ РјРѕРґРµРјР°
 
 //*****************************************************************************************
-// настройка модуля I2C в режиме мастер
+// РЅР°СЃС‚СЂРѕР№РєР° РјРѕРґСѓР»СЏ I2C РІ СЂРµР¶РёРјРµ РјР°СЃС‚РµСЂ
 void i2c_open (void)
 {
     // Configure Pins for I2C
@@ -41,7 +41,7 @@ void i2c_open (void)
     PMM_unlockLPM5();
 
     //
-    // Инициализируем модуль как Мастер
+    // РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РјРѕРґСѓР»СЊ РєР°Рє РњР°СЃС‚РµСЂ
     //
     EUSCI_B_I2C_initMasterParam param = {0};
     param.selectClockSource = EUSCI_B_I2C_CLOCKSOURCE_SMCLK;
@@ -51,7 +51,7 @@ void i2c_open (void)
 //    param.byteCounterThreshold = 1;
     param.autoSTOPGeneration = EUSCI_B_I2C_NO_AUTO_STOP;
     //
-    // Инициализируем I2C как мастер
+    // РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј I2C РєР°Рє РјР°СЃС‚РµСЂ
     //
     EUSCI_B_I2C_initMaster(EUSCI_B0_BASE, &param);
     //
@@ -62,56 +62,56 @@ void read_Status_LCD (void)
 {
 unsigned int timer;
     //
-    // Устанавливаем адрес ведомого устройства
+    // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј Р°РґСЂРµСЃ РІРµРґРѕРјРѕРіРѕ СѓСЃС‚СЂРѕР№СЃС‚РІР°
     //
     EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS);
     //
-    // Устанавливаем режим передачи. Set in transmit mode
+    // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј РїРµСЂРµРґР°С‡Рё. Set in transmit mode
     //
     EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);
     //
-    // Включаем модуль I2C. Enable I2C Module to start operations
+    // Р’РєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C. Enable I2C Module to start operations
     //
     EUSCI_B_I2C_enable(EUSCI_B0_BASE);
     //
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
                 timer++;
-                if(timer>5000)break; // таймер прерывания цикла
+                if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
     //
     __no_operation();
     /*
     bool EUSCI B I2C masterSendSingleByteWithTimeout (uint16 t baseAddress, uint8 t txData, uint32 t timeout)
 
-        Выполняет однобайтовую передачу от мастера к подчиненному с таймаутом.
-        Эта функция используется модулем Master для отправки одного байта.
-        Эта функция отправляет запуск, затем передает байт ведомому, а затем отправляет останов.
-        Параметры baseAddress - это базовый адрес модуля I2C Master.
-        txData - это байт данных, который должен быть передан.
-        Тайм-аут - это время ожидания до отказа.
+        Р’С‹РїРѕР»РЅСЏРµС‚ РѕРґРЅРѕР±Р°Р№С‚РѕРІСѓСЋ РїРµСЂРµРґР°С‡Сѓ РѕС‚ РјР°СЃС‚РµСЂР° Рє РїРѕРґС‡РёРЅРµРЅРЅРѕРјСѓ СЃ С‚Р°Р№РјР°СѓС‚РѕРј.
+        Р­С‚Р° С„СѓРЅРєС†РёСЏ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РјРѕРґСѓР»РµРј Master РґР»СЏ РѕС‚РїСЂР°РІРєРё РѕРґРЅРѕРіРѕ Р±Р°Р№С‚Р°.
+        Р­С‚Р° С„СѓРЅРєС†РёСЏ РѕС‚РїСЂР°РІР»СЏРµС‚ Р·Р°РїСѓСЃРє, Р·Р°С‚РµРј РїРµСЂРµРґР°РµС‚ Р±Р°Р№С‚ РІРµРґРѕРјРѕРјСѓ, Р° Р·Р°С‚РµРј РѕС‚РїСЂР°РІР»СЏРµС‚ РѕСЃС‚Р°РЅРѕРІ.
+        РџР°СЂР°РјРµС‚СЂС‹ baseAddress - СЌС‚Рѕ Р±Р°Р·РѕРІС‹Р№ Р°РґСЂРµСЃ РјРѕРґСѓР»СЏ I2C Master.
+        txData - СЌС‚Рѕ Р±Р°Р№С‚ РґР°РЅРЅС‹С…, РєРѕС‚РѕСЂС‹Р№ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРµСЂРµРґР°РЅ.
+        РўР°Р№Рј-Р°СѓС‚ - СЌС‚Рѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РґРѕ РѕС‚РєР°Р·Р°.
 
-        Модифицированные биты регистра UCBxTXBUF, биты регистра UCBxCTLW0,
-        биты регистра UCBxIE и биты регистра UCBxIFG.
+        РњРѕРґРёС„РёС†РёСЂРѕРІР°РЅРЅС‹Рµ Р±РёС‚С‹ СЂРµРіРёСЃС‚СЂР° UCBxTXBUF, Р±РёС‚С‹ СЂРµРіРёСЃС‚СЂР° UCBxCTLW0,
+        Р±РёС‚С‹ СЂРµРіРёСЃС‚СЂР° UCBxIE Рё Р±РёС‚С‹ СЂРµРіРёСЃС‚СЂР° UCBxIFG.
 
-        Возвращает STATUS SUCCESS или STATUS FAILURE процесса передачи.
+        Р’РѕР·РІСЂР°С‰Р°РµС‚ STATUS SUCCESS РёР»Рё STATUS FAILURE РїСЂРѕС†РµСЃСЃР° РїРµСЂРµРґР°С‡Рё.
      */
 
-    //EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE,0xE2 ); // 0xE2 СИСТЕМНЫЙ СБРОС дисплея
+    //EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE,0xE2 ); // 0xE2 РЎРРЎРўР•РњРќР«Р™ РЎР‘Р РћРЎ РґРёСЃРїР»РµСЏ
     if(EUSCI_B_I2C_masterSendSingleByteWithTimeout (EUSCI_B0_BASE,0xAF,10000 )){
         display = 1;
-        indi=20;                // * разрешить индикацию на 10 секунд
-        P2IE  = BIT3 | BIT4;    // Разрешаем прерывание P2.3,4 от кнопок
+        indi=20;                // * СЂР°Р·СЂРµС€РёС‚СЊ РёРЅРґРёРєР°С†РёСЋ РЅР° 10 СЃРµРєСѓРЅРґ
+        P2IE  = BIT3 | BIT4;    // Р Р°Р·СЂРµС€Р°РµРј РїСЂРµСЂС‹РІР°РЅРёРµ P2.3,4 РѕС‚ РєРЅРѕРїРѕРє
     }
     else{
         display = 0;
-        indi=0;                // * разрешить индикацию на 10 секунд
-        P2IE  &= ~BIT3;         // ЗАПРЕЩАЕМ прерывание от P2.3
-        P2IE  &= ~BIT4;         // ЗАПРЕЩАЕМ прерывание от P2.4
+        indi=0;                // * СЂР°Р·СЂРµС€РёС‚СЊ РёРЅРґРёРєР°С†РёСЋ РЅР° 10 СЃРµРєСѓРЅРґ
+        P2IE  &= ~BIT3;         // Р—РђРџР Р•Р©РђР•Рњ РїСЂРµСЂС‹РІР°РЅРёРµ РѕС‚ P2.3
+        P2IE  &= ~BIT4;         // Р—РђРџР Р•Р©РђР•Рњ РїСЂРµСЂС‹РІР°РЅРёРµ РѕС‚ P2.4
 
     }
-            //EUSCI_B_I2C_masterSendSingleByteWithTimeout (EUSCI_B0_BASE,0xE2,10000 ); // 0xE2 СИСТЕМНЫЙ СБРОС дисплея
+            //EUSCI_B_I2C_masterSendSingleByteWithTimeout (EUSCI_B0_BASE,0xE2,10000 ); // 0xE2 РЎРРЎРўР•РњРќР«Р™ РЎР‘Р РћРЎ РґРёСЃРїР»РµСЏ
     __no_operation();
     RxMbuf.ind = 0;
     RxMbuf.max = 512;           //255;
@@ -121,28 +121,63 @@ unsigned int timer;
 
 }//
 
+void lcd_power_off(void)
+{
+    unsigned int timer;
+
+    if(!display) return;
+
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS);
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);
+
+    timer = 0;
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){
+        timer++;
+        if(timer > 5000) break;
+    }
+
+    EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+        EUSCI_B0_BASE,
+        0xAE,
+        10000);
+
+    __delay_cycles(100000);
+
+    EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+        EUSCI_B0_BASE,
+        0xAE,
+        10000);
+
+    __delay_cycles(100000);
+
+    EUSCI_B_I2C_disable(EUSCI_B0_BASE);
+    indi = 0;
+}
+
 //*****************************************************************************************
+//*
 void clear_LCD (char tip)
 {
 int a;
 unsigned int timer;
     //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
+    if(!display) return;  // Р•СЃР»Рё РЅРµС‚ РєР»Р°РІРёР°С‚СѓСЂС‹ - РІС‹С…РѕРґРёРј.
     //-----------------------------------------------------
 
-    //i2c_start(0x70,0,0);    // 0x70 адрес индикатора, команда, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS);         // Устан.Адрес дисплея и флаг "Запись команды"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    //i2c_start(0x70,0,0);    // 0x70 Р°РґСЂРµСЃ РёРЅРґРёРєР°С‚РѕСЂР°, РєРѕРјР°РЅРґР°, Р·Р°РїРёСЃСЊ
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS);         // РЈСЃС‚Р°РЅ.РђРґСЂРµСЃ РґРёСЃРїР»РµСЏ Рё С„Р»Р°Рі "Р—Р°РїРёСЃСЊ РєРѕРјР°РЅРґС‹"
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј "РџРµСЂРµРґР°С‡Р°"
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // РІРєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
            timer++;
-           if(timer>5000)break; // таймер прерывания цикла
+           if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
-    //i2c_write(0xb0);    //0b10110000 страница 0
+    //i2c_write(0xb0);    //0b10110000 СЃС‚СЂР°РЅРёС†Р° 0
     EUSCI_B_I2C_masterSendMultiByteStart (EUSCI_B0_BASE, 0xb0);
-    //    i2c_write(0x00);    //0b00000000 колонка 0
+    //    i2c_write(0x00);    //0b00000000 РєРѕР»РѕРЅРєР° 0
     EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, 0x00);
     //    i2c_write(0x10);    //0b00010000
     EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, 0x10);
@@ -150,15 +185,15 @@ unsigned int timer;
     EUSCI_B_I2C_masterSendMultiByteStop (EUSCI_B0_BASE);
 
 
-    //i2c_start(0x70,1,0);    // адрес индикатора, данные, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // Устан.Адрес дисплея и флаг "Запись данных"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    //i2c_start(0x70,1,0);    // Р°РґСЂРµСЃ РёРЅРґРёРєР°С‚РѕСЂР°, РґР°РЅРЅС‹Рµ, Р·Р°РїРёСЃСЊ
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // РЈСЃС‚Р°РЅ.РђРґСЂРµСЃ РґРёСЃРїР»РµСЏ Рё С„Р»Р°Рі "Р—Р°РїРёСЃСЊ РґР°РЅРЅС‹С…"
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј "РџРµСЂРµРґР°С‡Р°"
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // РІРєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
            timer++;
-           if(timer>5000)break; // таймер прерывания цикла
+           if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
 
     if (tip==0){
@@ -189,144 +224,170 @@ unsigned int timer;
     }
     //HWREG(I2C0_MASTER_BASE + I2C_O_MCS) = I2C_MASTER_CMD_BURST_SEND_STOP;  //i2c_stop();
 }
-
+// */
 //*****************************************************************************************
 void init_LCD (void)
 {
 unsigned int timer;
     //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
+    if(!display) return;  // Р•СЃР»Рё РЅРµС‚ РєР»Р°РІРёР°С‚СѓСЂС‹ - РІС‹С…РѕРґРёРј.
     //-----------------------------------------------------
     //
-    // Устанавливаем адрес ведомого устройства
+    // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј Р°РґСЂРµСЃ РІРµРґРѕРјРѕРіРѕ СѓСЃС‚СЂРѕР№СЃС‚РІР°
     //
     EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS);
     //
-    // Устанавливаем режим передачи. Set in transmit mode
+    // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј РїРµСЂРµРґР°С‡Рё. Set in transmit mode
     //
     EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);
     //
-    // Включаем модуль I2C. Enable I2C Module to start operations
+    // Р’РєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C. Enable I2C Module to start operations
     //
     EUSCI_B_I2C_enable(EUSCI_B0_BASE);
     //
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
                 timer++;
-                if(timer>5000)break; // таймер прерывания цикла
+                if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
     //
-    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE,0xE2 ); // 0xE2 СИСТЕМНЫЙ СБРОС дисплея
+    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE,0xE2 ); // 0xE2 РЎРРЎРўР•РњРќР«Р™ РЎР‘Р РћРЎ РґРёСЃРїР»РµСЏ
 
-    __delay_cycles(300000);  // ждем 3мс, пока разрядится конденсатор
+    __delay_cycles(300000);  // Р¶РґРµРј 3РјСЃ, РїРѕРєР° СЂР°Р·СЂСЏРґРёС‚СЃСЏ РєРѕРЅРґРµРЅСЃР°С‚РѕСЂ
 
     EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS );
     EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);
     EUSCI_B_I2C_enable(EUSCI_B0_BASE);
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
                 timer++;
-                if(timer>5000)break; // таймер прерывания цикла
+                if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
     //
     EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE,0xEB );      // 0xEB   BIAS 6
     //
-    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE,0x81 );      // настройка Vbias
+    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE,0x81 );      // РЅР°СЃС‚СЂРѕР№РєР° Vbias
     //
-    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 124 );   // координата x
+    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 124 );   // РєРѕРѕСЂРґРёРЅР°С‚Р° x
     //
-    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 0xC6 );  // настройка типа разветки сверху в низ, и слева на право
-    //EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 0xC0 );// настройка типа разветки снизу вверх, и с права-на лево
+    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 0xC6 );  // РЅР°СЃС‚СЂРѕР№РєР° С‚РёРїР° СЂР°Р·РІРµС‚РєРё СЃРІРµСЂС…Сѓ РІ РЅРёР·, Рё СЃР»РµРІР° РЅР° РїСЂР°РІРѕ
+    //EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 0xC0 );// РЅР°СЃС‚СЂРѕР№РєР° С‚РёРїР° СЂР°Р·РІРµС‚РєРё СЃРЅРёР·Сѓ РІРІРµСЂС…, Рё СЃ РїСЂР°РІР°-РЅР° Р»РµРІРѕ
     //
-    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 0xAF );    // Включаем дисплей
+    EUSCI_B_I2C_masterSendSingleByte(EUSCI_B0_BASE, 0xAF );    // Р’РєР»СЋС‡Р°РµРј РґРёСЃРїР»РµР№
     //
-    __delay_cycles(300000);  // ждем 3мс, пока разрядится конденсатор
+    __delay_cycles(300000);  // Р¶РґРµРј 3РјСЃ, РїРѕРєР° СЂР°Р·СЂСЏРґРёС‚СЃСЏ РєРѕРЅРґРµРЅСЃР°С‚РѕСЂ
 }//
 
 //*****************************************************************************************
-void i2c_writeChar(unsigned char c) //  ; формирования записи байта в устройство
+void i2c_writeChar(unsigned char c)
 {
     unsigned char i;
-    unsigned int timer;
-    //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
-    //-----------------------------------------------------
+    unsigned char value;
 
-    //i2c_start(0x70,1,0);    // адрес индикатора, данные, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // Устан.Адрес дисплея и флаг "Запись данных"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
-        timer++;
-        if(timer>5000)break; // таймер прерывания цикла
-    }
+    if(!display) return;
 
-    if(c<0x80){
-        EUSCI_B_I2C_masterSendMultiByteStart (EUSCI_B0_BASE, Font5x7[((c-0x20)*5)]);
-        for(i=1; i<5; i++){
-            //i2c_write(Font5x7[((c-0x20)*5)+i]);
-            EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, Font5x7[((c-0x20)*5)+i]);
+    EUSCI_B_I2C_setSlaveAddress(
+        EUSCI_B0_BASE,
+        SLAVE_ADDRESS | 0x01
+    );
+
+    EUSCI_B_I2C_setMode(
+        EUSCI_B0_BASE,
+        EUSCI_B_I2C_TRANSMIT_MODE
+    );
+
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);
+
+    if(c < 0x80)
+    {
+        for(i = 0; i < 5; i++)
+        {
+            value = Font5x7[((c - 0x20) * 5) + i];
+
+            EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+                EUSCI_B0_BASE,
+                value,
+                10000
+            );
         }
     }
-    else if(c>=0xC0){
-        EUSCI_B_I2C_masterSendMultiByteStart (EUSCI_B0_BASE, Font5x7_ru[((c-0xC0)*5)]);
-        for(i=1; i<5; i++){
-            //i2c_write(Font5x7_ru[((c-0xC0)*5)+i]);
-            EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, Font5x7_ru[((c-0xC0)*5)+i]);
+    else if(c >= 0xC0)
+    {
+        for(i = 0; i < 5; i++)
+        {
+            value = Font5x7_ru[((c - 0xC0) * 5) + i];
+
+            EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+                EUSCI_B0_BASE,
+                value,
+                10000
+            );
         }
     }
-    //i2c_write(0x00);    // Пишем колонку "пробел"
-    EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, 0x00);
 
-    //HWREG(I2C0_MASTER_BASE + I2C_O_MCS) = I2C_MASTER_CMD_BURST_SEND_STOP;  //i2c_stop();
-    EUSCI_B_I2C_masterSendMultiByteStop (EUSCI_B0_BASE);
-
+    /* РєРѕР»РѕРЅРєР°-РїСЂРѕР±С–Р» РјС–Р¶ СЃРёРјРІРѕР»Р°РјРё */
+    EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+        EUSCI_B0_BASE,
+        0x00,
+        10000
+    );
 }
 
 //*****************************************************************************************
-void i2c_writeChar_inv(unsigned char c) //  ; формирования записи байта в устройство
+void i2c_writeChar_inv(unsigned char c)
 {
     unsigned char i;
-    unsigned int timer;
-    //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
-    //-----------------------------------------------------
+    unsigned char value;
 
-    //i2c_start(0x70,1,0);    // адрес индикатора, данные, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // Устан.Адрес дисплея и флаг "Запись данных"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
-        timer++;
-        if(timer>5000)break; // таймер прерывания цикла
-    }
+    if(!display) return;
 
-    if(c<0x80){
-        EUSCI_B_I2C_masterSendMultiByteStart (EUSCI_B0_BASE, ~Font5x7[((c-0x20)*5)]);
-        for(i=1; i<5; i++){
-            //i2c_write(Font5x7[((c-0x20)*5)+i]);
-            EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, ~Font5x7[((c-0x20)*5)+i]);
+    EUSCI_B_I2C_setSlaveAddress(
+        EUSCI_B0_BASE,
+        SLAVE_ADDRESS | 0x01
+    );
+
+    EUSCI_B_I2C_setMode(
+        EUSCI_B0_BASE,
+        EUSCI_B_I2C_TRANSMIT_MODE
+    );
+
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);
+
+    if(c < 0x80)
+    {
+        for(i = 0; i < 5; i++)
+        {
+            value = (unsigned char)~Font5x7[((c - 0x20) * 5) + i];
+
+            EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+                EUSCI_B0_BASE,
+                value,
+                10000
+            );
         }
     }
-    else if(c>=0xC0){
-        EUSCI_B_I2C_masterSendMultiByteStart (EUSCI_B0_BASE, ~Font5x7_ru[((c-0xC0)*5)]);
-        for(i=1; i<5; i++){
-            //i2c_write(Font5x7_ru[((c-0xC0)*5)+i]);
-            EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, ~Font5x7_ru[((c-0xC0)*5)+i]);
+    else if(c >= 0xC0)
+    {
+        for(i = 0; i < 5; i++)
+        {
+            value = (unsigned char)~Font5x7_ru[((c - 0xC0) * 5) + i];
+
+            EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+                EUSCI_B0_BASE,
+                value,
+                10000
+            );
         }
     }
-    //i2c_write(0x00);    // Пишем колонку "пробел"
-    EUSCI_B_I2C_masterSendMultiByteNext (EUSCI_B0_BASE, 0xFF);
 
-    //HWREG(I2C0_MASTER_BASE + I2C_O_MCS) = I2C_MASTER_CMD_BURST_SEND_STOP;  //i2c_stop();
-    EUSCI_B_I2C_masterSendMultiByteStop (EUSCI_B0_BASE);
-
+    /* С–РЅРІРµСЂСЃРЅРёР№ РїСЂРѕР±С–Р» РјС–Р¶ СЃРёРјРІРѕР»Р°РјРё */
+    EUSCI_B_I2C_masterSendSingleByteWithTimeout(
+        EUSCI_B0_BASE,
+        0xFF,
+        10000
+    );
 }
 
 //*****************************************************************************/
@@ -334,17 +395,17 @@ void i2c_PutMultySimb(const char *data, char len)
 {
 unsigned int timer;
     //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
+    if(!display) return;  // Р•СЃР»Рё РЅРµС‚ РєР»Р°РІРёР°С‚СѓСЂС‹ - РІС‹С…РѕРґРёРј.
     //-----------------------------------------------------
-    //i2c_start(0x70,1,0);    // адрес индикатора, данные, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // Устан.Адрес дисплея и флаг "Запись данных"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    //i2c_start(0x70,1,0);    // Р°РґСЂРµСЃ РёРЅРґРёРєР°С‚РѕСЂР°, РґР°РЅРЅС‹Рµ, Р·Р°РїРёСЃСЊ
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // РЈСЃС‚Р°РЅ.РђРґСЂРµСЃ РґРёСЃРїР»РµСЏ Рё С„Р»Р°Рі "Р—Р°РїРёСЃСЊ РґР°РЅРЅС‹С…"
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј "РџРµСЂРµРґР°С‡Р°"
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // РІРєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
            timer++;
-           if(timer>5000)break; // таймер прерывания цикла
+           if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
 
 
@@ -357,23 +418,23 @@ unsigned int timer;
     }
 }
 //*****************************************************************************/
-/* Выводит только значащие символы, ведущие нули опускаются.
+/* Р’С‹РІРѕРґРёС‚ С‚РѕР»СЊРєРѕ Р·РЅР°С‡Р°С‰РёРµ СЃРёРјРІРѕР»С‹, РІРµРґСѓС‰РёРµ РЅСѓР»Рё РѕРїСѓСЃРєР°СЋС‚СЃСЏ.
 */
 void i2c_PutMultySimb_znach(const char *data, char len)
 {
 unsigned int timer;
     //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
+    if(!display) return;  // Р•СЃР»Рё РЅРµС‚ РєР»Р°РІРёР°С‚СѓСЂС‹ - РІС‹С…РѕРґРёРј.
     //-----------------------------------------------------
-    //i2c_start(0x70,1,0);    // адрес индикатора, данные, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // Устан.Адрес дисплея и флаг "Запись данных"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    //i2c_start(0x70,1,0);    // Р°РґСЂРµСЃ РёРЅРґРёРєР°С‚РѕСЂР°, РґР°РЅРЅС‹Рµ, Р·Р°РїРёСЃСЊ
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // РЈСЃС‚Р°РЅ.РђРґСЂРµСЃ РґРёСЃРїР»РµСЏ Рё С„Р»Р°Рі "Р—Р°РїРёСЃСЊ РґР°РЅРЅС‹С…"
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј "РџРµСЂРµРґР°С‡Р°"
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // РІРєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
            timer++;
-           if(timer>5000)break; // таймер прерывания цикла
+           if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
 
     while (len) {
@@ -395,17 +456,17 @@ void i2c_PutStr(const char *data)
 {
 unsigned int timer;
     //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
+    if(!display) return;  // Р•СЃР»Рё РЅРµС‚ РєР»Р°РІРёР°С‚СѓСЂС‹ - РІС‹С…РѕРґРёРј.
     //-----------------------------------------------------
-    //i2c_start(0x70,1,0);    // адрес индикатора, данные, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // Устан.Адрес дисплея и флаг "Запись данных"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    //i2c_start(0x70,1,0);    // Р°РґСЂРµСЃ РёРЅРґРёРєР°С‚РѕСЂР°, РґР°РЅРЅС‹Рµ, Р·Р°РїРёСЃСЊ
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // РЈСЃС‚Р°РЅ.РђРґСЂРµСЃ РґРёСЃРїР»РµСЏ Рё С„Р»Р°Рі "Р—Р°РїРёСЃСЊ РґР°РЅРЅС‹С…"
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј "РџРµСЂРµРґР°С‡Р°"
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // РІРєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
            timer++;
-           if(timer>5000)break; // таймер прерывания цикла
+           if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
 
 
@@ -416,22 +477,93 @@ unsigned int timer;
         data++;
     }
 }
+
+static unsigned char utf8_to_lcd_char(const unsigned char **data)
+{
+    unsigned char c;
+    unsigned char d;
+
+    c = **data;
+    (*data)++;
+
+    if (c < 0x80) {
+        return c;
+    }
+
+    d = **data;
+    if (d != 0) {
+        (*data)++;
+    }
+
+    if (c == 0xD0) {
+        if ((d >= 0x90) && (d <= 0xBF)) {
+            return d + 0x30;
+        }
+        if (d == 0x81) return 0xC5;
+        if (d == 0x84) return 0xC5;
+        if ((d == 0x86) || (d == 0x87)) return 'I';
+    }
+    else if (c == 0xD1) {
+        if ((d >= 0x80) && (d <= 0x8F)) {
+            return d + 0x70;
+        }
+        if (d == 0x91) return 0xE5;
+        if (d == 0x94) return 0xE5;
+        if ((d == 0x96) || (d == 0x97)) return 'i';
+    }
+    else if (c == 0xD2) {
+        if (d == 0x90) return 0xC3;
+        if (d == 0x91) return 0xE3;
+    }
+
+    while ((**data & 0xC0) == 0x80) {
+        (*data)++;
+    }
+
+    return '?';
+}
+
+void i2c_PutStrUtf8(const char *data)
+{
+    const unsigned char *utf8;
+
+    if(!display) return;
+
+    utf8 = (const unsigned char *)data;
+
+    while (*utf8) {
+        i2c_writeChar(utf8_to_lcd_char(&utf8));
+    }
+}
+
+void i2c_PutStrUtf8_inv(const char *data)
+{
+    const unsigned char *utf8;
+
+    if(!display) return;
+
+    utf8 = (const unsigned char *)data;
+
+    while (*utf8) {
+        i2c_writeChar_inv(utf8_to_lcd_char(&utf8));
+    }
+}
 //*****************************************************************************/
 void i2c_PutStr_inv(const char *data)
 {
 unsigned int timer;
     //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
+    if(!display) return;  // Р•СЃР»Рё РЅРµС‚ РєР»Р°РІРёР°С‚СѓСЂС‹ - РІС‹С…РѕРґРёРј.
     //-----------------------------------------------------
-    //i2c_start(0x70,1,0);    // адрес индикатора, данные, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // Устан.Адрес дисплея и флаг "Запись данных"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    //i2c_start(0x70,1,0);    // Р°РґСЂРµСЃ РёРЅРґРёРєР°С‚РѕСЂР°, РґР°РЅРЅС‹Рµ, Р·Р°РїРёСЃСЊ
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS | 0x01 );  // РЈСЃС‚Р°РЅ.РђРґСЂРµСЃ РґРёСЃРїР»РµСЏ Рё С„Р»Р°Рі "Р—Р°РїРёСЃСЊ РґР°РЅРЅС‹С…"
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј "РџРµСЂРµРґР°С‡Р°"
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // РІРєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
            timer++;
-           if(timer>5000)break; // таймер прерывания цикла
+           if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
 
 
@@ -443,28 +575,28 @@ unsigned int timer;
 }
 
 //*****************************************************************************/
-// 1 - X [кордината по X][Х 0-132] - значение в пикселях.
-// 2 - Y [номер строки дисплея 1-8]
+// 1 - X [РєРѕСЂРґРёРЅР°С‚Р° РїРѕ X][РҐ 0-132] - Р·РЅР°С‡РµРЅРёРµ РІ РїРёРєСЃРµР»СЏС….
+// 2 - Y [РЅРѕРјРµСЂ СЃС‚СЂРѕРєРё РґРёСЃРїР»РµСЏ 1-8]
 void i2c_SetAddress(unsigned char X, char Y)
 {
 unsigned int timer;
     //-----------------------------------------------------
-    if(!display) return;  // Если нет клавиатуры - выходим.
+    if(!display) return;  // Р•СЃР»Рё РЅРµС‚ РєР»Р°РІРёР°С‚СѓСЂС‹ - РІС‹С…РѕРґРёРј.
     //-----------------------------------------------------
-    //i2c_start(0x70,0,0);                // 0x70 адрес индикатора, команда, запись
-    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS );  // Устан.Адрес дисплея и флаг "Запись команд"
-    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // Устанавливаем режим "Передача"
-    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // включаем модуль I2C
-    // Обязательная процедура: Проверяем и ждем, если надо освобождения шины данных
-    timer=0;// ожидание проводим с таймером
-    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //ожидание окончания формирования бита стоп
+    //i2c_start(0x70,0,0);                // 0x70 Р°РґСЂРµСЃ РёРЅРґРёРєР°С‚РѕСЂР°, РєРѕРјР°РЅРґР°, Р·Р°РїРёСЃСЊ
+    EUSCI_B_I2C_setSlaveAddress(EUSCI_B0_BASE, SLAVE_ADDRESS );  // РЈСЃС‚Р°РЅ.РђРґСЂРµСЃ РґРёСЃРїР»РµСЏ Рё С„Р»Р°Рі "Р—Р°РїРёСЃСЊ РєРѕРјР°РЅРґ"
+    EUSCI_B_I2C_setMode(EUSCI_B0_BASE, EUSCI_B_I2C_TRANSMIT_MODE);      // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј "РџРµСЂРµРґР°С‡Р°"
+    EUSCI_B_I2C_enable(EUSCI_B0_BASE);                                  // РІРєР»СЋС‡Р°РµРј РјРѕРґСѓР»СЊ I2C
+    // РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°: РџСЂРѕРІРµСЂСЏРµРј Рё Р¶РґРµРј, РµСЃР»Рё РЅР°РґРѕ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ С€РёРЅС‹ РґР°РЅРЅС‹С…
+    timer=0;// РѕР¶РёРґР°РЅРёРµ РїСЂРѕРІРѕРґРёРј СЃ С‚Р°Р№РјРµСЂРѕРј
+    while(EUSCI_B_I2C_isBusBusy(EUSCI_B0_BASE)){   //РѕР¶РёРґР°РЅРёРµ РѕРєРѕРЅС‡Р°РЅРёСЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РёС‚Р° СЃС‚РѕРї
            timer++;
-           if(timer>5000)break; // таймер прерывания цикла
+           if(timer>5000)break; // С‚Р°Р№РјРµСЂ РїСЂРµСЂС‹РІР°РЅРёСЏ С†РёРєР»Р°
     }
-    EUSCI_B_I2C_masterSendMultiByteStart (EUSCI_B0_BASE, (X & 0x0f));       // координата x (X3,X2,X1,X0)
-    EUSCI_B_I2C_masterSendMultiByteNext  (EUSCI_B0_BASE, (X & 0x0f));       // координата x (X7,X6,X5,X4)
-    EUSCI_B_I2C_masterSendMultiByteNext  (EUSCI_B0_BASE, ((X >> 4) | 0x10));// координата x (X7,X6,X5,X4)
-    EUSCI_B_I2C_masterSendMultiByteNext  (EUSCI_B0_BASE, (0xb0 | Y));       // координата y
+    EUSCI_B_I2C_masterSendMultiByteStart (EUSCI_B0_BASE, (X & 0x0f));       // РєРѕРѕСЂРґРёРЅР°С‚Р° x (X3,X2,X1,X0)
+    EUSCI_B_I2C_masterSendMultiByteNext  (EUSCI_B0_BASE, (X & 0x0f));       // РєРѕРѕСЂРґРёРЅР°С‚Р° x (X7,X6,X5,X4)
+    EUSCI_B_I2C_masterSendMultiByteNext  (EUSCI_B0_BASE, ((X >> 4) | 0x10));// РєРѕРѕСЂРґРёРЅР°С‚Р° x (X7,X6,X5,X4)
+    EUSCI_B_I2C_masterSendMultiByteNext  (EUSCI_B0_BASE, (0xb0 | Y));       // РєРѕРѕСЂРґРёРЅР°С‚Р° y
     EUSCI_B_I2C_masterSendMultiByteStop  (EUSCI_B0_BASE); //i2c_stop();
 
 }

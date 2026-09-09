@@ -151,7 +151,6 @@ void lcd_power_off(void)
 
     __delay_cycles(100000);
 
-    EUSCI_B_I2C_disable(EUSCI_B0_BASE);
     indi = 0;
 }
 

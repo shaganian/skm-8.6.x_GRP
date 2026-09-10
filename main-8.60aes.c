@@ -475,7 +475,7 @@ struct {
         CSCTL0_H = CSKEY >> 8;                      // Снимаем блокировку регистров CS
         CSCTL1 = DCOFSEL_0;                         // Устанавливаем DCO на 1 MHz
         //CSCTL2 = SELM__DCOCLK | SELS__DCOCLK | SELA__VLOCLK;
-        CSCTL2 = SELM__DCOCLK | SELS__DCOCLK | SELA__LFMODOSC;
+        CSCTL2 = SELM__DCOCLK | SELS__DCOCLK | SELA__VLOCLK;
         CSCTL3 = DIVA__1 | DIVS__1 | DIVM__1;       // Устанавливаем все делители в 1
         CSCTL4 = LFXTOFF | HFXTOFF;
         CSCTL0_H = 0;                               // Блокируем регистры CS
@@ -897,7 +897,7 @@ struct {
                     //
                     // ИНИЦИАЛИЗИРУЕМ ПЕРИФЕРИЮ
                     //
-                    if(time_ind < 10){                          // если не закончилось время индикации
+                    if(time_ind < 15){                          // если не закончилось время индикации
                         i = PJIN & 0x03;
                         if(i == 0x01){                          // Если нажата кнопка PJ.1  [ - * - - ]
                             kbd_process();                      // Читаем клавиатуру

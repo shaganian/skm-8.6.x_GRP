@@ -34,13 +34,14 @@ boot_reset_vector:
     ; ------------------------------------------------------------
 
     .global boot_port1_proxy
-    .global Port_1
+    ;.global Port_1
 
     .sect ".boot_proxy"
     .retain
 
 boot_port1_proxy:
-    BR      #Port_1
+    ;BR      #Port_1
+    BR      &0x4720
 
 
     ; MSP430FR5949 PORT1_VECTOR = .int39 = 0xFFDE
@@ -53,23 +54,23 @@ boot_port1_proxy:
     ; .word Port_1
 
     .global boot_port2_proxy
-    .global Port_2
+    ;.global Port_2
 
     .sect ".boot_proxy"
     .retain
 
 boot_port2_proxy:
-    BR      #Port_2
+    BR      &0x4722
 
 
     .global boot_port3_proxy
-    .global Port_3
+    ;.global Port_3
 
     .sect ".boot_proxy"
     .retain
 
 boot_port3_proxy:
-    BR      #Port_3
+    BR      &0x4724
     
     ; MSP430FR5949 PORT2_VECTOR = .int36 = 0xFFD8
 
@@ -85,13 +86,13 @@ boot_port3_proxy:
 
 
     .global boot_wdt_proxy
-    .global WDT_ISR
+    ;.global WDT_ISR
 
     .sect ".boot_proxy"
     .retain
 
 boot_wdt_proxy:
-    BR      #WDT_ISR
+    BR      &0x4726
 
     ; MSP430FR5949 WDT_VECTOR = .int49 = 0xFFF2
 
@@ -101,13 +102,13 @@ boot_wdt_proxy:
     
 
     .global boot_usci_a0_proxy
-    .global USCI_A0_ISR
+    ;.global USCI_A0_ISR
 
     .sect ".boot_proxy"
     .retain
 
 boot_usci_a0_proxy:
-    BR      #USCI_A0_ISR
+    BR      &0x4728
 
     ; MSP430FR5949 USCI_A0_VECTOR = .int48 = 0xFFF0
 
@@ -117,13 +118,13 @@ boot_usci_a0_proxy:
     
 
     .global boot_usci_b0_proxy
-    .global USCI_B0_ISR
+    ;.global USCI_B0_ISR
 
     .sect ".boot_proxy"
     .retain
 
 boot_usci_b0_proxy:
-    BR      #USCI_B0_ISR
+    BR      &0x472A
 
     ; MSP430FR5949 USCI_B0_VECTOR = .int47 = 0xFFEE
     .sect ".int47"
@@ -132,13 +133,13 @@ boot_usci_b0_proxy:
     
 
     .global boot_adc12_proxy
-    .global ADC12ISR
+    ;.global ADC12ISR
 
     .sect ".boot_proxy"
     .retain
 
 boot_adc12_proxy:
-    BR      #ADC12ISR
+    BR      &0x472C
 
     ; MSP430FR5949 ADC12_VECTOR = .int46 = 0xFFEC
     .sect ".int46"

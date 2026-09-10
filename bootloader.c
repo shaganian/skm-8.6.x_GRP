@@ -48,6 +48,64 @@ static const AppHeader *boot_get_app(void)
     return (const AppHeader *)(uintptr_t)APP_A_HEADER_ADDR;
 }
 
+typedef union
+{
+    app_code_ptr_t code;
+    uint16_t word[2];
+
+} BootCodePtr;
+
+#pragma CODE_SECTION(boot_get_isr16, ".boot_text")
+#pragma RETAIN(boot_get_isr16)
+static uint16_t boot_get_isr16(app_code_ptr_t isr)
+{
+    BootCodePtr p;
+
+    p.code = isr;
+
+    /*
+     * Усі ISR A/B повинні бути нижче 0x10000.
+     * Для boot proxy використовується молодше 16 біт.
+     */
+    if (p.word[1] != 0u)
+    {
+        boot_fail();
+    }
+
+    if (p.word[0] == 0u)
+    {
+        boot_fail();
+    }
+
+    return p.word[0];
+}
+
+#pragma CODE_SECTION(boot_set_dispatch, ".boot_text")
+#pragma RETAIN(boot_set_dispatch)
+static void boot_set_dispatch(const AppHeader *app)
+{
+    *(volatile uint16_t *)BOOT_DISPATCH_PORT1_ADDR =
+        boot_get_isr16(app->isr_port1);
+
+    *(volatile uint16_t *)BOOT_DISPATCH_PORT2_ADDR =
+        boot_get_isr16(app->isr_port2);
+
+    *(volatile uint16_t *)BOOT_DISPATCH_PORT3_ADDR =
+        boot_get_isr16(app->isr_port3);
+
+    *(volatile uint16_t *)BOOT_DISPATCH_WDT_ADDR =
+        boot_get_isr16(app->isr_wdt);
+
+    *(volatile uint16_t *)BOOT_DISPATCH_USCI_A0_ADDR =
+        boot_get_isr16(app->isr_usci_a0);
+
+    *(volatile uint16_t *)BOOT_DISPATCH_USCI_B0_ADDR =
+        boot_get_isr16(app->isr_usci_b0);
+
+    *(volatile uint16_t *)BOOT_DISPATCH_ADC12_ADDR =
+        boot_get_isr16(app->isr_adc12);
+}
+
 #pragma CODE_SECTION(boot_reset, ".boot_text")
 #pragma RETAIN(boot_reset)
 void boot_reset(void)
@@ -73,6 +131,8 @@ void boot_reset(void)
         boot_fail();
     }
 
+    boot_set_dispatch(app);
+    
     app->entry();
 
     boot_fail();

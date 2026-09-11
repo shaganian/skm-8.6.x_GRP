@@ -12,6 +12,8 @@
 #define BOOT_SLOT_B               1u
 #define BOOT_SLOT_NONE            0xFFu
 
+#define BOOT_FLAG_TRIAL_STARTED    0x0001u
+
 #define BOOT_DISPATCH_ADDR          0x4720u
 
 #define BOOT_DISPATCH_PORT1_ADDR    0x4720u

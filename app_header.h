@@ -4,7 +4,10 @@
 #include <stdint.h>
 
 #define APP_HEADER_MAGIC          0x534Bu   /* "SK" */
-#define APP_HEADER_FORMAT_VERSION 1u
+#define APP_HEADER_FORMAT_VERSION_V1 1u
+#define APP_HEADER_FORMAT_VERSION_V2 2u
+#define APP_HEADER_FORMAT_VERSION    APP_HEADER_FORMAT_VERSION_V2
+#define APP_IMAGE_PAYLOAD_SIZE   30396UL
 
 typedef void (*app_code_ptr_t)(void);
 
@@ -25,6 +28,9 @@ typedef struct
     app_code_ptr_t isr_usci_b0;
 
     app_code_ptr_t isr_adc12;
+
+    uint32_t image_size;
+    uint32_t image_crc32;
 
 } AppHeader;
 

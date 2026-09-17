@@ -8,7 +8,7 @@
 #define APP_B_HEADER_ADDR   0xA7C0u
 
 
-static uint8_t boot_current_slot(void)
+uint8_t boot_get_current_slot(void)
 {
     uintptr_t header_addr = (uintptr_t)&g_app_header;
 
@@ -25,6 +25,67 @@ static uint8_t boot_current_slot(void)
     return BOOT_SLOT_NONE;
 }
 
+
+uint8_t boot_set_pending(uint8_t slot)
+{
+    volatile BootMeta *meta =
+        (volatile BootMeta *)(uintptr_t)BOOT_META_ADDR;
+
+    uint8_t current_slot;
+
+    if ((meta->magic != BOOT_META_MAGIC) ||
+        (meta->format_version != BOOT_META_FORMAT_VERSION))
+    {
+        return 0u;
+    }
+
+    if ((slot != BOOT_SLOT_A) &&
+        (slot != BOOT_SLOT_B))
+    {
+        return 0u;
+    }
+
+    current_slot = boot_get_current_slot();
+
+    if (current_slot == BOOT_SLOT_NONE)
+    {
+        return 0u;
+    }
+
+    /*
+     * OTA дозволено готувати тільки в неактивний Slot.
+     */
+    if (slot == current_slot)
+    {
+        return 0u;
+    }
+
+    /*
+     * Стан BootMeta повинен відповідати firmware,
+     * яка реально зараз виконується.
+     */
+    if (meta->active_slot != current_slot)
+    {
+        return 0u;
+    }
+
+    /*
+     * Новий pending ще не є trial.
+     *
+     * pending_slot записуємо ОСТАННІМ:
+     * це commit-marker готового OTA образу.
+     *
+     * Якщо живлення зникне раніше, bootloader
+     * не побачить нового pending Slot.
+     */
+    meta->flags &= (uint16_t)~BOOT_FLAG_TRIAL_STARTED;
+    meta->sequence++;
+    meta->pending_slot = slot;
+
+    return 1u;
+}
+
+
 uint8_t boot_confirm(void)
 {
     volatile BootMeta *meta =
@@ -38,7 +99,7 @@ uint8_t boot_confirm(void)
         return 0u;
     }
 
-    current_slot = boot_current_slot();
+    current_slot = boot_get_current_slot();
 
     if (current_slot == BOOT_SLOT_NONE)
     {

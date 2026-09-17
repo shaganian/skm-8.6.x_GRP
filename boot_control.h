@@ -12,4 +12,20 @@
  */
 uint8_t boot_confirm(void);
 
+/*
+ * Повертає Slot, у якому зараз виконується application:
+ * BOOT_SLOT_A, BOOT_SLOT_B або BOOT_SLOT_NONE.
+ */
+uint8_t boot_get_current_slot(void);
+
+/*
+ * Позначає неактивний Slot як pending.
+ *
+ * Повертає:
+ *   1 - pending успішно встановлено
+ *   0 - помилка BootMeta, невірний Slot або спроба
+ *       встановити поточний активний Slot як pending
+ */
+uint8_t boot_set_pending(uint8_t slot);
+
 #endif

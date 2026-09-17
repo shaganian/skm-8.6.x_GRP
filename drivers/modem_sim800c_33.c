@@ -77,15 +77,16 @@ static char is_hex_digit(unsigned char c)
             ((c >= 'a') && (c <= 'f')));
 }
 
-static char remote_payload_is_hex(unsigned int start)
+static char remote_payload_is_hex(unsigned int start,
+                                  unsigned int hex_len)
 {
     unsigned int i;
 
-    if ((start + 64u) > RxMbuf.max) {
+    if ((start + hex_len) > RxMbuf.max) {
         return 0;
     }
 
-    for (i = 0; i < 64u; i++) {
+    for (i = 0; i < hex_len; i++) {
         if (!is_hex_digit(RxMbuf.buf[start + i])) {
             return 0;
         }
@@ -93,6 +94,63 @@ static char remote_payload_is_hex(unsigned int start)
 
     return 1;
 }
+
+static char remote_payload_find_before_closed(
+    unsigned int closed_pos,
+    unsigned int hex_len,
+    unsigned int *payload_start)
+{
+    unsigned int gap;
+    unsigned int start;
+
+    /*
+     * CLOSED знаходиться трохи після HTTP body.
+     * Не покладаємося на фіксоване зміщення 73/137:
+     * шукаємо суцільний HEX payload у невеликому
+     * вікні безпосередньо перед CLOSED.
+     */
+    for (gap = 0u; gap <= 32u; gap++) {
+        if (closed_pos < (hex_len + gap)) {
+            continue;
+        }
+
+        start = closed_pos - hex_len - gap;
+
+        if (remote_payload_is_hex(start, hex_len)) {
+            *payload_start = start;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+
+static unsigned int remote_cmp_str_limited(
+    const char *string,
+    unsigned char *buf,
+    unsigned int limit)
+{
+    unsigned int ind_str = 0u;
+    unsigned int pos;
+
+    for (pos = 0u; pos < limit; pos++)
+    {
+        if ((unsigned char)string[ind_str] == buf[pos]) {
+            ind_str++;
+        }
+        else {
+            ind_str = 0u;
+        }
+
+        if (string[ind_str] == 0) {
+            return pos;
+        }
+    }
+
+    return 0u;
+}
+
 
 static void clear_csq(void)
 {
@@ -275,12 +333,39 @@ void init_uart0 (void)
 }
 //
 /********************************************************************/
+/*
+ * Communication retry timing.
+ *
+ * During OTA we retry quickly and preserve the OTA session.
+ * Outside OTA the legacy delay/error code remains unchanged.
+ */
+static void set_comm_retry_pack_time(unsigned int normal_pack_time)
+{
+    if ((ota_get_status() == 1u) ||
+        (ota_get_status() == 2u))
+    {
+        pack_time = 3u;
+    }
+    else
+    {
+        pack_time = normal_pack_time;
+    }
+}
+
+/********************************************************************/
 // Процедура передачи пакета данных на сервер
 char send_packet (void)
 {
 unsigned char index;
 unsigned char connected;
+unsigned long ota_session_start_received;
+unsigned char gprs_recover_try = 0;
 unsigned int lenreq,i,remote_payload_start;//
+unsigned int remote_payload_hex_len;
+unsigned int aes_block;
+
+    ota_session_start_received = ota_get_received();
+
     __delay_cycles(100000);                    // ждем...
 
     index = 0;
@@ -331,11 +416,20 @@ unsigned int lenreq,i,remote_payload_start;//
                     start_init_job=1;
                     i2c_SetAddress(100,LINE6); i2c_PutStr("OK 2\xe5");
                 }
+                if ((ota_get_status() == 1u) ||
+                    (ota_get_status() == 2u))
+                {
+                    set_comm_retry_pack_time(424u);
+                    P4OUT &= ~BIT4;
+                    return 0;
+                }
+
                 SW_RESET();  // программный сброс
             }
             //
             // указываем точку входа:
             //
+gprs_recover_cstt:
             lenreq  = WriteBuf( &TxMbuf.buf[0], "AT+CSTT=");
 
             if(operat_GSM == '1')lenreq += WriteBuf( &TxMbuf.buf[lenreq], "\"www.umc.ua\"");           // МТС      AT+CIPCSGP=1,"www.umc.ua"
@@ -365,6 +459,14 @@ unsigned int lenreq,i,remote_payload_start;//
                  if(start_init_job != 0){
                      start_init_job=1;
                  }
+                 if ((ota_get_status() == 1u) ||
+                     (ota_get_status() == 2u))
+                 {
+                     set_comm_retry_pack_time(424u);
+                     P4OUT &= ~BIT4;
+                     return 0;
+                 }
+
                  SW_RESET();  // программный сброс
              }
              //
@@ -379,6 +481,34 @@ unsigned int lenreq,i,remote_payload_start;//
 
              //if(cmp_str("PDP DEACT",&RxMbuf.buf[0])){
              if(cmp_str("ERROR",&RxMbuf.buf[0]) || !repl){
+
+                 /*
+                  * GPRS/PDP recovery.
+                  *
+                  * Після короткого збою мережі SIM800 може показувати
+                  * CGATT:1, але AT+CIICR відповідає PDP DEACT / ERROR.
+                  * Один раз примусово перепідключаємо packet service
+                  * без вимкнення живлення модема.
+                  */
+                 if(gprs_recover_try == 0u)
+                 {
+                     gprs_recover_try = 1u;
+
+                     for(i=0; i < 512; i++) RxMbuf.buf[i] = 0;
+                     RxMbuf.ind = 0;
+                     Send_from_UART0("AT+CGATT=0\r\n");
+                     wait_compl("OK", &RxMbuf.buf[0], 1000);
+                     delay_ms(2000);
+
+                     for(i=0; i < 512; i++) RxMbuf.buf[i] = 0;
+                     RxMbuf.ind = 0;
+                     Send_from_UART0("AT+CGATT=1\r\n");
+                     wait_compl("OK", &RxMbuf.buf[0], 2000);
+                     delay_ms(5000);
+
+                     goto gprs_recover_cstt;
+                 }
+
                  if(start_init_job != 0){
                      start_init_job=1;
                  }
@@ -402,7 +532,7 @@ unsigned int lenreq,i,remote_payload_start;//
                  delay_ms(1000);
                  try++;
                  if(try >=3){            // .
-                     pack_time = 424;    // Устанавливаем время ожидания 1 час
+                     set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
                      operat_GSM = 0;     //
                      try = 0;            // чистим количество попыток
                      //
@@ -436,7 +566,7 @@ unsigned int lenreq,i,remote_payload_start;//
                          }
                          try++;
                          if(try >=3){            // .
-                             pack_time = 424;    // Устанавливаем время ожидания 1 час
+                             set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
                              operat_GSM = 0;     //
                              try = 0;            // чистим количество попыток
                          }
@@ -464,7 +594,7 @@ unsigned int lenreq,i,remote_payload_start;//
                      }
                      try++;
                      if(try >=3){            // .
-                         pack_time = 424;    // Устанавливаем время ожидания 1 час
+                         set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
                          operat_GSM = 0;     //
                          try = 0;            // чистим количество попыток
                          //
@@ -475,6 +605,14 @@ unsigned int lenreq,i,remote_payload_start;//
                          //
                          return 0;   // выходим из инициализации
                      }
+                     if ((ota_get_status() == 1u) ||
+                         (ota_get_status() == 2u))
+                     {
+                         set_comm_retry_pack_time(424u);
+                         P4OUT &= ~BIT4;
+                         return 0;
+                     }
+
                      SW_RESET();  // программный сброс
                  }
              }
@@ -506,7 +644,7 @@ unsigned int lenreq,i,remote_payload_start;//
             }
             try++;
             if(try >=3){            // .
-                pack_time = 424;    // Устанавливаем время ожидания 1 час
+                set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
                 operat_GSM = 0;     //
                 try = 0;            // чистим количество попыток
                 //
@@ -518,6 +656,14 @@ unsigned int lenreq,i,remote_payload_start;//
                 return 0;   // выходим из инициализации
             }
             //
+            if ((ota_get_status() == 1u) ||
+                (ota_get_status() == 2u))
+            {
+                set_comm_retry_pack_time(424u);
+                P4OUT &= ~BIT4;
+                return 0;
+            }
+
             SW_RESET();  // программный сброс
             //
         }
@@ -544,7 +690,7 @@ unsigned int lenreq,i,remote_payload_start;//
             __delay_cycles(10000000);  // ждем... 1с=8,000,000
             try++;
             if(try >=3){            // .
-                pack_time = 424;    // Устанавливаем время ожидания 1 час
+                set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
                 operat_GSM = 0;     //
                 try = 0;            // чистим количество попыток
                 //
@@ -556,6 +702,14 @@ unsigned int lenreq,i,remote_payload_start;//
                 return 0;   // выходим из инициализации
             }
             //
+            if ((ota_get_status() == 1u) ||
+                (ota_get_status() == 2u))
+            {
+                set_comm_retry_pack_time(424u);
+                P4OUT &= ~BIT4;
+                return 0;
+            }
+
             SW_RESET();  // программный сброс
             //
         }
@@ -582,7 +736,7 @@ unsigned int lenreq,i,remote_payload_start;//
             __delay_cycles(10000000);  // ждем... 1с=8,000,000
             try++;
             if(try >=3){    // СИМ-карта не найдена.
-                pack_time = 424;    // Устанавливаем время ожидания 1 час
+                set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
                 operat_GSM = 0;     //
                 try = 0;            // чистим количество попыток
                 //
@@ -594,6 +748,14 @@ unsigned int lenreq,i,remote_payload_start;//
                 return 0;   // выходим из инициализации
             }
             //
+            if ((ota_get_status() == 1u) ||
+                (ota_get_status() == 2u))
+            {
+                set_comm_retry_pack_time(424u);
+                P4OUT &= ~BIT4;
+                return 0;
+            }
+
             SW_RESET();  // программный сброс
             //
         }
@@ -615,6 +777,11 @@ unsigned int lenreq,i,remote_payload_start;//
 //
 //  открываем соединение:
 //
+ota_next_tcp:
+
+     for(i=0; i < 512; i++) RxMbuf.buf[i] = 0;
+     RxMbuf.ind = 0;
+
      if(server==0) Send_from_UART0("AT+CIPSTART=\"TCP\",\"www.skydom.info");        // СКАЙДОМ:
 else if(server==1) Send_from_UART0("AT+CIPSTART=\"TCP\",\"sky.kgaz.com.ua");        // КРЕМЕНЧУКГАЗ:
 //else if(server==1) Send_from_UART0("AT+CIPSTART=\"TCP\",\"193.109.249.254");      // КРЕМЕНЧУКГАЗ:
@@ -657,12 +824,20 @@ while(time_w1 < MODEM_TCP_CONNECT_TIMEOUT_MS){
         }
         try++;
         if(try >=3){            // .
-            pack_time = 424;    // Устанавливаем время ожидания 1 час
+            set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
             operat_GSM = 0;     //
             try = 0;            // чистим количество попыток
             P4OUT &= ~BIT4;     //
             return 0;           // выходим из инициализации
         }
+        if ((ota_get_status() == 1u) ||
+            (ota_get_status() == 2u))
+        {
+            set_comm_retry_pack_time(424u);
+            P4OUT &= ~BIT4;
+            return 0;
+        }
+
         SW_RESET();             // программный сброс
     }
 
@@ -672,12 +847,20 @@ while(time_w1 < MODEM_TCP_CONNECT_TIMEOUT_MS){
         }
         try++;
         if(try >=3){            // .
-            pack_time = 424;    // Устанавливаем время ожидания 1 час
+            set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
             operat_GSM = 0;     //
             try = 0;            // чистим количество попыток
             P4OUT &= ~BIT4;     //
             return 0;           // выходим из инициализации
         }
+        if ((ota_get_status() == 1u) ||
+            (ota_get_status() == 2u))
+        {
+            set_comm_retry_pack_time(424u);
+            P4OUT &= ~BIT4;
+            return 0;
+        }
+
         SW_RESET();             // программный сброс
     }
 
@@ -691,12 +874,20 @@ if(!connected){
     }
     try++;
     if(try >=3){            // .
-        pack_time = 424;    // Устанавливаем время ожидания 1 час
+        set_comm_retry_pack_time(424u);    // Устанавливаем время ожидания 1 час
         operat_GSM = 0;     //
         try = 0;            // чистим количество попыток
         P4OUT &= ~BIT4;     //
         return 0;           // выходим из инициализации
     }
+    if ((ota_get_status() == 1u) ||
+        (ota_get_status() == 2u))
+    {
+        set_comm_retry_pack_time(424u);
+        P4OUT &= ~BIT4;
+        return 0;
+    }
+
     SW_RESET();             // программный сброс
 }
     delay_ms(100);
@@ -751,35 +942,50 @@ if(!connected){
         //
         EUSCI_A_UART_transmitData(EUSCI_A0_BASE, 0x1A);
 
-        time_w1 =0;
-        while(time_w1 < 1500){
+        /*
+         * Wait for confirmation that SIM800 has actually sent
+         * the TCP payload.
+         *
+         * Do not reset the MSP430 on timeout: OTA receive state
+         * is held in RAM and must survive a transient GSM failure.
+         */
+        time_w1 = 0;
+        while(time_w1 < 20000u){
             delay_ms(1);
+
             if(cmp_str("SEND OK",&RxMbuf.buf[0])){
                 RxMbuf.ind = 0;
                 index++;                                // !!! порядок !!!
                 i2c_SetAddress(100,LINE6); i2c_PutStr("OK 7 ");
                 break;
             }
+
             time_w1++;
         }
-        if(time_w1 >= 1500){
-            if(start_init_job > 0){
-                start_init_job=1;
-                try++;
-                if(try >=3){            // .
-                    pack_time = 424;    // Устанавливаем время ожидания 1 час
-                    operat_GSM = 0;     //
-                    try = 0;            // чистим количество попыток
-                    //
-                    // 4 - M_ON - включение модема
-                    // ОТКлючаем БЛОК питания модема
-                    //
-                    P4OUT &= ~BIT4;              //
-                    //
-                    return 0;   // выходим из инициализации
-                }
-                SW_RESET();  // программный сброс
+
+        if(time_w1 >= 20000u){
+            /*
+             * SEND OK was not received.
+             *
+             * The server may not have received this request, so:
+             *  - do not advance OTA state;
+             *  - do not reset MSP430;
+             *  - tear down the modem IP session;
+             *  - retry later with the same OTA ACK.
+             */
+            for(i=0; i < 512; i++) RxMbuf.buf[i] = 0;
+            RxMbuf.ind = 0;
+
+            Send_from_UART0("AT+CIPSHUT\r\n");
+            wait_compl("SHUT OK", &RxMbuf.buf[0], 5000);
+
+            P4OUT &= ~BIT4;
+
+            if(ota_get_status() == 2u){
+                pack_time = 3u;
             }
+
+            return 0;
         }
         // "SEND OK" - данные успешно переданы.
         // ожидаем состояние CLOSED - закрытие соединения
@@ -790,67 +996,123 @@ if(!connected){
             delay_ms(1000);
 
 
-            if(cmp_str("CLOSED\r\n",&RxMbuf.buf[0])){
+            result_remote_command =
+                remote_cmp_str_limited(
+                    "CLOSED\r\n",
+                    &RxMbuf.buf[0],
+                    RxMbuf.ind);
 
-                result_remote_command = cmp_str("CLOSED\r\n",&RxMbuf.buf[0]);
-                if ((result_remote_command < 73u) ||
-                    !remote_payload_is_hex(result_remote_command - 73u)) {
-                    pack_time = 421;
+            if (result_remote_command) {
+
+                /*
+                 * Remote payload transport:
+                 *
+                 * old protocol:
+                 *   64 HEX chars = 32 encrypted bytes
+                 *                = 2 AES blocks
+                 *
+                 * extended protocol:
+                 *   128 HEX chars = 64 encrypted bytes
+                 *                 = 4 AES blocks
+                 *
+                 * 9 bytes between the end of encrypted payload
+                 * and the position returned for CLOSED remain unchanged.
+                 */
+
+                if (remote_payload_find_before_closed(
+                        result_remote_command,
+                        128u,
+                        &remote_payload_start))
+                {
+                    remote_payload_hex_len = 128u;
+                }
+                else if (remote_payload_find_before_closed(
+                             result_remote_command,
+                             64u,
+                             &remote_payload_start))
+                {
+                    remote_payload_hex_len = 64u;
+                }
+                else
+                {
+                    set_comm_retry_pack_time(421u);
                     index++;
                     time_w1 = 0;
                     break;
                 }
-                remote_payload_start = result_remote_command - 73u;
 
-// 1 *****************************************************************************************
-	               for(i=0; i<32; i++){
-	                    encrdata[i] = RxMbuf.buf[remote_payload_start+i];
-	                }
-                uint16_t i = 0;
-                uint16_t j = 0;
-
-                for (i = 0, j = 0; j < 16; j++, i += 2) {
-                    uint8_t hi = hex_nibble(encrdata[i]);
-                    uint8_t lo = hex_nibble(encrdata[i+1]);
-                    RxMbuf.buf[j] = (uint8_t)((hi << 4) | lo);
+                /*
+                 * Clear plaintext area so that the short
+                 * 32-byte protocol cannot leave stale bytes.
+                 */
+                for (i = 0; i < 64u; i++) {
+                    encrdata[i] = 0;
                 }
 
-                    // Завантажуємо ключ шифрування в модуль
-                    AES256_setDecipherKey(AES256_BASE, CipherKey, AES256_KEYLENGTH_256BIT);
+                /*
+                 * Every AES block is represented by
+                 * 32 hexadecimal characters.
+                 */
+                for (aes_block = 0;
+                     aes_block < (remote_payload_hex_len / 32u);
+                     aes_block++)
+                {
+                    unsigned int j;
 
-                    // Розшифровуємо дані
-                    //AES256_decryptData(AES256_BASE, DataAESencrypted, DataAESdecrypted);
-                    AES256_decryptData(AES256_BASE, &RxMbuf.buf[0], DataAESdecrypted);
+                    for (j = 0; j < 16u; j++)
+                    {
+                        unsigned int hex_pos =
+                            remote_payload_start +
+                            aes_block * 32u +
+                            j * 2u;
 
-                    for (i=0; i < 16; i++){
-                        encrdata[i] = DataAESdecrypted[i];
-                        //HTOA(DataAESdecrypted[i], &decrdata[q]); q += 2;
+                        uint8_t hi =
+                            hex_nibble(RxMbuf.buf[hex_pos]);
+                        uint8_t lo =
+                            hex_nibble(RxMbuf.buf[hex_pos + 1u]);
+
+                        RxMbuf.buf[j] =
+                            (uint8_t)((hi << 4) | lo);
                     }
-// 2 *****************************************************************************************
 
-	                for(i=0; i<32; i++){
-	                    encrdata[i+100] = RxMbuf.buf[remote_payload_start+32+i];
-	                }
-                i = 0;
-                j = 0;
-                for (i = 0, j = 0; j < 16; j++, i += 2) {
-                    uint8_t hi = hex_nibble(encrdata[i+100]);
-                    uint8_t lo = hex_nibble(encrdata[i+101]);
-                    RxMbuf.buf[j] = (uint8_t)((hi << 4) | lo);
+                    AES256_setDecipherKey(
+                        AES256_BASE,
+                        CipherKey,
+                        AES256_KEYLENGTH_256BIT);
+
+                    AES256_decryptData(
+                        AES256_BASE,
+                        &RxMbuf.buf[0],
+                        DataAESdecrypted);
+
+                    for (j = 0; j < 16u; j++)
+                    {
+                        encrdata[aes_block * 16u + j] =
+                            DataAESdecrypted[j];
+                    }
                 }
-                // Завантажуємо ключ шифрування в модуль
-                AES256_setDecipherKey(AES256_BASE, CipherKey, AES256_KEYLENGTH_256BIT);
-
-                // Розшифровуємо дані
-                AES256_decryptData(AES256_BASE, &RxMbuf.buf[0], DataAESdecrypted);
-
-                for (i=0; i < 16; i++){
-                    encrdata[i+16] = DataAESdecrypted[i];
-                }
-// end *****************************************************************************************
 
                 // Устанавливаем время интервалов между передачами на сервер
                 result_remote_command = parse_remote_command();
+
+                /*
+                 * OTA multi-chunk:
+                 * залишаємо GPRS активним і відразу відкриваємо
+                 * наступний TCP-сеанс.
+                 *
+                 * Перший тест: максимум 4 OTA chunks за один
+                 * виклик send_packet().
+                 */
+                if ((ota_get_status() == 2u) &&
+                    ((ota_get_received() - ota_session_start_received) < 512UL))
+                {
+                    for(i=0; i < 512; i++) RxMbuf.buf[i] = 0;
+                    RxMbuf.ind = 0;
+
+                    delay_ms(5000);
+
+                    goto ota_next_tcp;
+                }
 
                 i2c_SetAddress(100,LINE6); i2c_PutStr("OK*  ");
                 index++;                                // !!! порядок !!!
@@ -858,7 +1120,7 @@ if(!connected){
                 break;
             }
             if(cmp_str("packet error",&RxMbuf.buf[0])){
-                pack_time = 421;
+                set_comm_retry_pack_time(421u);
                 //
                 // 4 - M_ON - включение модема
                 // ОТКлючаем БЛОК питания модема
@@ -872,8 +1134,21 @@ if(!connected){
         }
     }
     if(time_w1 >= 25){
-        // оставляем частоту передачи 1час
-        pack_time  = DEFAULT_PACK_TIME_TICKS;
+        /*
+         * During OTA a lost HTTP response must not introduce
+         * a long normal telemetry delay.
+         *
+         * Keep the current OTA ACK/received state and retry soon.
+         */
+        if ((ota_get_status() == 1u) ||
+            (ota_get_status() == 2u))
+        {
+            pack_time = 3u;
+        }
+        else
+        {
+            pack_time = DEFAULT_PACK_TIME_TICKS;
+        }
     }
     // Коды ошибок:
     // 420 - норма utilites_skz.c строка 1217

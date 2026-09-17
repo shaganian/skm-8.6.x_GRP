@@ -1,3 +1,7 @@
+#include <intrinsics.h>
+#include "../app_header.h"
+#include "../boot_control.h"
+#include "../boot_meta.h"
 //********************************************************************
 //  utilites.c
 //  Различные вспомогательные функции
@@ -138,7 +142,7 @@ static unsigned char ota_is_hex(unsigned char c)
 
 static unsigned char ota_expect_char(unsigned int *pos, unsigned char c)
 {
-    if ((*pos >= 32u) || (encrdata[*pos] != c)) {
+    if ((*pos >= 64u) || (encrdata[*pos] != c)) {
         ota_rx.status = OTA_STATUS_ERROR;
         return 0;
     }
@@ -151,7 +155,7 @@ static unsigned char ota_parse_dec(unsigned int *pos, unsigned long *value)
     unsigned char digits = 0;
     unsigned long out = 0;
 
-    while ((*pos < 32u) && ota_is_digit(encrdata[*pos])) {
+    while ((*pos < 64u) && ota_is_digit(encrdata[*pos])) {
         out = (out * 10u) + (unsigned long)(encrdata[*pos] - '0');
         (*pos)++;
         digits++;
@@ -172,7 +176,7 @@ static unsigned char ota_parse_hex_fixed(unsigned int *pos,
     unsigned long out = 0;
 
     for (i = 0; i < digits; i++) {
-        if ((*pos >= 32u) || !ota_is_hex(encrdata[*pos])) {
+        if ((*pos >= 64u) || !ota_is_hex(encrdata[*pos])) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 0;
         }
@@ -224,18 +228,546 @@ static unsigned long ota_crc32_update(unsigned long crc,
     return crc;
 }
 
+
+
+/*
+ * Canonical OTA image layout.
+ *
+ * Logical OTA stream:
+ *
+ *   0 .. 43        AppHeader v2       44 bytes
+ *   44 .. 22251    application LOW    22208 bytes
+ *   22252 .. 30439 application HIGH   8188 bytes
+ *
+ * Physical addresses depend on inactive Slot.
+ */
+
+#define OTA_IMAGE_HEADER_SIZE     44UL
+#define OTA_IMAGE_LOW_SIZE        0x56C0UL
+#define OTA_IMAGE_HIGH_SIZE       0x1FFCUL
+#define OTA_IMAGE_TOTAL_SIZE      30440UL
+
+#define OTA_SLOT_A_HEADER_ADDR    0x05000UL
+#define OTA_SLOT_A_LOW_ADDR       0x05100UL
+#define OTA_SLOT_A_HIGH_ADDR      0x10000UL
+
+#define OTA_SLOT_B_HEADER_ADDR    0x0A7C0UL
+#define OTA_SLOT_B_LOW_ADDR       0x0A8C0UL
+#define OTA_SLOT_B_HIGH_ADDR      0x11FFCUL
+
+#define OTA_SLOT_A                0u
+#define OTA_SLOT_B                1u
+#define OTA_SLOT_NONE             0xFFu
+
+
+static unsigned char ota_current_slot(void)
+{
+    unsigned long header_addr =
+        (unsigned long)(uintptr_t)&g_app_header;
+
+    if (header_addr == OTA_SLOT_A_HEADER_ADDR)
+    {
+        return OTA_SLOT_A;
+    }
+
+    if (header_addr == OTA_SLOT_B_HEADER_ADDR)
+    {
+        return OTA_SLOT_B;
+    }
+
+    return OTA_SLOT_NONE;
+}
+
+
+
+static unsigned char ota_inactive_slot(void)
+{
+    unsigned char current_slot = ota_current_slot();
+
+    if (current_slot == OTA_SLOT_A)
+    {
+        return OTA_SLOT_B;
+    }
+
+    if (current_slot == OTA_SLOT_B)
+    {
+        return OTA_SLOT_A;
+    }
+
+    return OTA_SLOT_NONE;
+}
+
+
+static unsigned long ota_crc32_region20(unsigned long crc,
+                                        unsigned long address,
+                                        unsigned long size)
+{
+    unsigned char value;
+    unsigned char bit;
+
+    while (size != 0UL)
+    {
+        value = __data20_read_char(address);
+        address++;
+        size--;
+
+        crc ^= (unsigned long)value;
+
+        for (bit = 0u; bit < 8u; bit++)
+        {
+            if ((crc & 1UL) != 0UL)
+            {
+                crc = (crc >> 1) ^ 0xEDB88320UL;
+            }
+            else
+            {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return crc;
+}
+
+
+/*
+ * Перевіряє вже фізично записаний неактивний Slot.
+ *
+ * Критерії ті самі, що використовує boot_validate_v2():
+ *   magic
+ *   format version v2
+ *   entry != 0
+ *   image_size
+ *   CRC32 LOW + HIGH
+ */
+static unsigned char ota_validate_inactive_image(
+    unsigned char *inactive_slot_out)
+{
+    unsigned char slot;
+    unsigned long header_addr;
+    unsigned long low_addr;
+    unsigned long high_addr;
+    unsigned long crc;
+
+    const AppHeader *app;
+
+    if (inactive_slot_out == 0)
+    {
+        return 0u;
+    }
+
+    slot = ota_inactive_slot();
+
+    if (slot == OTA_SLOT_A)
+    {
+        header_addr = OTA_SLOT_A_HEADER_ADDR;
+        low_addr    = OTA_SLOT_A_LOW_ADDR;
+        high_addr   = OTA_SLOT_A_HIGH_ADDR;
+    }
+    else if (slot == OTA_SLOT_B)
+    {
+        header_addr = OTA_SLOT_B_HEADER_ADDR;
+        low_addr    = OTA_SLOT_B_LOW_ADDR;
+        high_addr   = OTA_SLOT_B_HIGH_ADDR;
+    }
+    else
+    {
+        return 0u;
+    }
+
+    app = (const AppHeader *)(uintptr_t)header_addr;
+
+    if (app->magic != APP_HEADER_MAGIC)
+    {
+        return 0u;
+    }
+
+    if (app->format_version != APP_HEADER_FORMAT_VERSION_V2)
+    {
+        return 0u;
+    }
+
+    if (app->entry == 0)
+    {
+        return 0u;
+    }
+
+    if (app->image_size != APP_IMAGE_PAYLOAD_SIZE)
+    {
+        return 0u;
+    }
+
+    crc = 0xFFFFFFFFUL;
+
+    crc = ota_crc32_region20(
+        crc,
+        low_addr,
+        OTA_IMAGE_LOW_SIZE);
+
+    crc = ota_crc32_region20(
+        crc,
+        high_addr,
+        OTA_IMAGE_HIGH_SIZE);
+
+    crc ^= 0xFFFFFFFFUL;
+
+    if (crc != app->image_crc32)
+    {
+        return 0u;
+    }
+
+    *inactive_slot_out = slot;
+
+    return 1u;
+}
+
+
+/*
+ * Перетворює логічний offset фінального OTA-файлу
+ * у фізичну адресу ТІЛЬКИ неактивного Slot.
+ *
+ * Повертає:
+ *   1 - адреса коректна
+ *   0 - offset/поточний Slot некоректні
+ */
+static unsigned char ota_offset_to_inactive_address(
+    unsigned long offset,
+    unsigned long *address)
+{
+    unsigned char current_slot;
+    unsigned long header_base;
+    unsigned long low_base;
+    unsigned long high_base;
+
+    if (address == 0)
+    {
+        return 0u;
+    }
+
+    if (offset >= OTA_IMAGE_TOTAL_SIZE)
+    {
+        return 0u;
+    }
+
+    current_slot = ota_current_slot();
+
+    /*
+     * Вибираємо ТІЛЬКИ протилежний Slot.
+     */
+    if (current_slot == OTA_SLOT_A)
+    {
+        header_base = OTA_SLOT_B_HEADER_ADDR;
+        low_base    = OTA_SLOT_B_LOW_ADDR;
+        high_base   = OTA_SLOT_B_HIGH_ADDR;
+    }
+    else if (current_slot == OTA_SLOT_B)
+    {
+        header_base = OTA_SLOT_A_HEADER_ADDR;
+        low_base    = OTA_SLOT_A_LOW_ADDR;
+        high_base   = OTA_SLOT_A_HIGH_ADDR;
+    }
+    else
+    {
+        return 0u;
+    }
+
+    /*
+     * AppHeader: logical 0..43
+     */
+    if (offset < OTA_IMAGE_HEADER_SIZE)
+    {
+        *address = header_base + offset;
+        return 1u;
+    }
+
+    offset -= OTA_IMAGE_HEADER_SIZE;
+
+    /*
+     * LOW: logical 44..22251
+     */
+    if (offset < OTA_IMAGE_LOW_SIZE)
+    {
+        *address = low_base + offset;
+        return 1u;
+    }
+
+    offset -= OTA_IMAGE_LOW_SIZE;
+
+    /*
+     * HIGH: logical 22252..30439
+     */
+    if (offset < OTA_IMAGE_HIGH_SIZE)
+    {
+        *address = high_base + offset;
+        return 1u;
+    }
+
+    return 0u;
+}
+
+
+/*
+ * Запис одного OTA chunk у FRAM Seg3.
+ *
+ * MPU штатно має Seg3 = RX.
+ * На час запису додаємо тільки MPUSEG3WE,
+ * тобто RX -> RWX, після чого відновлюємо
+ * попередній MPUSAM.
+ *
+ * Поки ця функція НЕ викликається з ota_remote_command().
+ */
+static unsigned char ota_fram_write_chunk20(unsigned long address,
+                                             const unsigned char *data,
+                                             unsigned int len)
+{
+    unsigned int old_sam;
+    unsigned int old_sr;
+    unsigned int i;
+    unsigned char ok = 1u;
+
+    if ((data == 0) || (len == 0u) || (len > 16u))
+    {
+        return 0u;
+    }
+
+    /*
+     * Ніколи не дозволяємо цій функції писати
+     * SHARED_FRAM / BOOT_META / BOOT_AREA.
+     */
+    if ((address < 0x5000UL) ||
+        (address > 0x13FF7UL) ||
+        (((unsigned long)len - 1UL) > (0x13FF7UL - address)))
+    {
+        return 0u;
+    }
+
+    /*
+     * Поточна конфігурація проекту використовує
+     * MPUENA без MPULOCK.
+     *
+     * Якщо в майбутньому MPU буде hard-locked,
+     * OTA має завершитися помилкою, а не намагатися
+     * обходити захист.
+     */
+    if ((MPUCTL0_L & MPULOCK) != 0u)
+    {
+        return 0u;
+    }
+
+    old_sam = MPUSAM;
+    old_sr = __get_SR_register();
+
+    /*
+     * Не допускаємо ISR у короткому MPU write-window.
+     */
+    __disable_interrupt();
+
+    /*
+     * Відкрити конфігураційні регістри MPU.
+     * Зберігаємо поточний low byte MPUCTL0.
+     */
+    MPUCTL0 = MPUPW | (unsigned int)MPUCTL0_L;
+
+    /*
+     * Seg3: RX -> RWX.
+     * Інші права залишаються без змін.
+     */
+    MPUSAM = old_sam | MPUSEG3WE;
+
+    /*
+     * Знову закрити MPU configuration registers.
+     */
+    MPUCTL0_H = 0u;
+
+    /*
+     * Сам запис FRAM, включно з адресами > 0xFFFF.
+     */
+    for (i = 0u; i < len; i++)
+    {
+        __data20_write_char(
+            address + (unsigned long)i,
+            data[i]);
+    }
+
+    /*
+     * Одразу повертаємо початковий MPU access mask.
+     */
+    MPUCTL0 = MPUPW | (unsigned int)MPUCTL0_L;
+    MPUSAM = old_sam;
+    MPUCTL0_H = 0u;
+
+    /*
+     * Read-back verify вже при відновленому RX.
+     */
+    for (i = 0u; i < len; i++)
+    {
+        if (__data20_read_char(
+                address + (unsigned long)i) != data[i])
+        {
+            ok = 0u;
+            break;
+        }
+    }
+
+    /*
+     * Відновлюємо стан GIE, який був до виклику.
+     */
+    if ((old_sr & GIE) != 0u)
+    {
+        __enable_interrupt();
+    }
+
+    return ok;
+}
+
+
+
+/*
+ * Записує логічний OTA chunk у неактивний Slot.
+ *
+ * Логічний потік може бути безперервним, хоча фізично
+ * HEADER, LOW і HIGH розташовані в різних областях FRAM.
+ *
+ * Тому chunk при потребі автоматично розбивається
+ * на кілька фізичних записів.
+ */
+static unsigned char ota_write_logical_chunk(
+    unsigned long offset,
+    const unsigned char *data,
+    unsigned int len)
+{
+    unsigned long address;
+    unsigned long next_boundary;
+    unsigned long remaining_to_boundary;
+    unsigned int part;
+    unsigned int done = 0u;
+
+    if ((data == 0) || (len == 0u) || (len > 16u))
+    {
+        return 0u;
+    }
+
+    if ((offset >= OTA_IMAGE_TOTAL_SIZE) ||
+        ((unsigned long)len >
+         (OTA_IMAGE_TOTAL_SIZE - offset)))
+    {
+        return 0u;
+    }
+
+    while (done < len)
+    {
+        if (!ota_offset_to_inactive_address(
+                offset + (unsigned long)done,
+                &address))
+        {
+            return 0u;
+        }
+
+        /*
+         * Визначаємо наступну логічну межу.
+         */
+        if ((offset + (unsigned long)done) <
+            OTA_IMAGE_HEADER_SIZE)
+        {
+            next_boundary = OTA_IMAGE_HEADER_SIZE;
+        }
+        else if ((offset + (unsigned long)done) <
+                 (OTA_IMAGE_HEADER_SIZE +
+                  OTA_IMAGE_LOW_SIZE))
+        {
+            next_boundary =
+                OTA_IMAGE_HEADER_SIZE +
+                OTA_IMAGE_LOW_SIZE;
+        }
+        else
+        {
+            next_boundary = OTA_IMAGE_TOTAL_SIZE;
+        }
+
+        remaining_to_boundary =
+            next_boundary -
+            (offset + (unsigned long)done);
+
+        part = (unsigned int)(len - done);
+
+        if ((unsigned long)part > remaining_to_boundary)
+        {
+            part = (unsigned int)remaining_to_boundary;
+        }
+
+        if (!ota_fram_write_chunk20(
+                address,
+                &data[done],
+                part))
+        {
+            return 0u;
+        }
+
+        done += part;
+    }
+
+    return 1u;
+}
+
+
+/*
+ * Перевіряє, що вже записаний у неактивний Slot
+ * логічний OTA chunk повністю збігається з data.
+ *
+ * Використовується для безпечного прийому
+ * повторно доставленого oc= після втрати ACK.
+ */
+static unsigned char ota_verify_logical_chunk(
+    unsigned long offset,
+    const unsigned char *data,
+    unsigned int len)
+{
+    unsigned int i;
+    unsigned long address;
+
+    if ((data == 0) || (len == 0u))
+    {
+        return 0u;
+    }
+
+    if ((offset >= OTA_IMAGE_TOTAL_SIZE) ||
+        ((unsigned long)len >
+         (OTA_IMAGE_TOTAL_SIZE - offset)))
+    {
+        return 0u;
+    }
+
+    for (i = 0u; i < len; i++)
+    {
+        if (!ota_offset_to_inactive_address(
+                offset + (unsigned long)i,
+                &address))
+        {
+            return 0u;
+        }
+
+        if (__data20_read_char(address) != data[i])
+        {
+            return 0u;
+        }
+    }
+
+    return 1u;
+}
+
+
 static unsigned char ota_parse_hex_data(unsigned int *pos,
                                         unsigned char *data,
                                         unsigned int *len)
 {
     unsigned int out_len = 0;
 
-    while ((*pos < 32u) && ota_is_hex(encrdata[*pos])) {
-        if (((*pos + 1u) >= 32u) || !ota_is_hex(encrdata[*pos + 1u])) {
+    while ((*pos < 64u) && ota_is_hex(encrdata[*pos])) {
+        if (((*pos + 1u) >= 64u) || !ota_is_hex(encrdata[*pos + 1u])) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 0;
         }
-        if (out_len >= 8u) {
+        if (out_len >= 16u) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 0;
         }
@@ -251,13 +783,16 @@ static unsigned char ota_parse_hex_data(unsigned int *pos,
     return 1;
 }
 
+
+static char ota_remote_command(void);
 static char ota_remote_command(void)
 {
     unsigned int pos = 3;
     unsigned long value;
     unsigned long crc_value;
-    unsigned char data[8];
+    unsigned char data[16];
     unsigned int data_len;
+    unsigned char inactive_slot;
 
     if ((encrdata[0] != 'o') || (encrdata[2] != '=')) {
         return 0;
@@ -270,7 +805,7 @@ static char ota_remote_command(void)
             return 1;
         }
         if (!ota_parse_dec(&pos, &ota_rx.size)) return 1;
-        if ((ota_rx.size == 0) || (ota_rx.size > OTA_STAGE_SIZE) ||
+        if ((ota_rx.size != OTA_IMAGE_TOTAL_SIZE) ||
             !ota_expect_char(&pos, ',')) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 1;
@@ -283,6 +818,9 @@ static char ota_remote_command(void)
         ota_rx.chunks = 0;
         ota_rx.received = 0;
         ota_rx.running_crc32 = 0xFFFFFFFFUL;
+
+        pack_time = 3u;
+
         return 1;
     }
 
@@ -292,24 +830,124 @@ static char ota_remote_command(void)
             return 1;
         }
         if (!ota_parse_dec(&pos, &value)) return 1;
-        if ((value != ota_rx.received) || !ota_expect_char(&pos, ',')) {
-            ota_rx.status = OTA_STATUS_ERROR;
-            return 1;
-        }
-        if (!ota_parse_hex_fixed(&pos, 4u, &crc_value)) return 1;
-        if (!ota_expect_char(&pos, ',')) return 1;
-        if (!ota_parse_hex_data(&pos, data, &data_len)) return 1;
-        if (!ota_expect_char(&pos, ';')) return 1;
-        if ((ota_crc16_ccitt(data, data_len) != (unsigned int)crc_value) ||
-            ((ota_rx.received + data_len) > ota_rx.size)) {
+
+        if (!ota_expect_char(&pos, ',')) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 1;
         }
 
-        ota_rx.running_crc32 = ota_crc32_update(ota_rx.running_crc32, data, data_len);
+        if (!ota_parse_hex_fixed(
+                &pos,
+                4u,
+                &crc_value))
+        {
+            return 1;
+        }
+
+        if (!ota_expect_char(&pos, ',')) {
+            return 1;
+        }
+
+        if (!ota_parse_hex_data(
+                &pos,
+                data,
+                &data_len))
+        {
+            return 1;
+        }
+
+        if (!ota_expect_char(&pos, ';')) {
+            return 1;
+        }
+
+        /*
+         * CRC chunk та межі логічного OTA stream.
+         */
+        if (
+            ota_crc16_ccitt(data, data_len)
+                != (unsigned int)crc_value
+            || value > ota_rx.size
+            || (unsigned long)data_len
+                > (ota_rx.size - value)
+        ) {
+            ota_rx.status = OTA_STATUS_ERROR;
+            return 1;
+        }
+
+        /*
+         * Повтор останнього вже прийнятого chunk.
+         * Не записуємо FRAM повторно і не
+         * змінюємо rolling CRC32 / received.
+         */
+        if (
+            value < ota_rx.received
+            && (value + data_len)
+                == ota_rx.received
+        ) {
+            /*
+             * Діапазон відповідає останньому
+             * прийнятому chunk, але duplicate
+             * підтверджуємо лише якщо самі
+             * дані вже знаходяться у FRAM.
+             */
+            if (!ota_verify_logical_chunk(
+                    value,
+                    data,
+                    data_len))
+            {
+                ota_rx.status = OTA_STATUS_ERROR;
+                return 1;
+            }
+
+            /*
+             * Не змінюємо received, chunks
+             * та running_crc32.
+             */
+            ota_rx.status = OTA_STATUS_CHUNK_OK;
+
+            pack_time = 3u;
+
+            return 1;
+        }
+
+        /*
+         * Новий chunk повинен починатися точно
+         * з поточного received.
+         */
+        if (value != ota_rx.received) {
+            ota_rx.status = OTA_STATUS_ERROR;
+            return 1;
+        }
+
+        /*
+         * Спочатку фізично записуємо chunk
+         * у неактивний Slot і перевіряємо read-back.
+         *
+         * Лише після успішного запису оновлюємо
+         * OTA state та rolling CRC32.
+         */
+        if (!ota_write_logical_chunk(
+                ota_rx.received,
+                data,
+                data_len))
+        {
+            ota_rx.status = OTA_STATUS_ERROR;
+            ota_rx.active = 0u;
+            return 1;
+        }
+
+        ota_rx.running_crc32 =
+            ota_crc32_update(
+                ota_rx.running_crc32,
+                data,
+                data_len);
+
         ota_rx.received += data_len;
         ota_rx.chunks++;
         ota_rx.status = OTA_STATUS_CHUNK_OK;
+
+        pack_time = 3u;
+
         return 1;
     }
 
@@ -318,22 +956,68 @@ static char ota_remote_command(void)
             ota_rx.status = OTA_STATUS_ERROR;
             return 1;
         }
-        if (!ota_parse_hex_fixed(&pos, 8u, &crc_value)) return 1;
-        if (!ota_expect_char(&pos, ';')) return 1;
-        if ((ota_rx.received == ota_rx.size) &&
-            (crc_value == ota_rx.expected_crc32) &&
-            ((ota_rx.running_crc32 ^ 0xFFFFFFFFUL) == ota_rx.expected_crc32)) {
-            ota_rx.status = OTA_STATUS_READY;
+
+        if (!ota_parse_hex_fixed(&pos, 8u, &crc_value)) {
+            ota_rx.active = 0u;
+            return 1;
         }
-        else {
+
+        if (!ota_expect_char(&pos, ';')) {
+            ota_rx.active = 0u;
+            return 1;
+        }
+
+        /*
+         * 1. Перевірка транспортного пакета.
+         */
+        if ((ota_rx.size != OTA_IMAGE_TOTAL_SIZE) ||
+            (ota_rx.received != OTA_IMAGE_TOTAL_SIZE) ||
+            (crc_value != ota_rx.expected_crc32) ||
+            ((ota_rx.running_crc32 ^ 0xFFFFFFFFUL) !=
+                ota_rx.expected_crc32))
+        {
             ota_rx.status = OTA_STATUS_ERROR;
+            ota_rx.active = 0u;
+            return 1;
         }
-        ota_rx.active = 0;
+
+        /*
+         * 2. Перевірка реально записаного образу:
+         *    AppHeader v2 + payload CRC32.
+         */
+        if (!ota_validate_inactive_image(&inactive_slot))
+        {
+            ota_rx.status = OTA_STATUS_ERROR;
+            ota_rx.active = 0u;
+            return 1;
+        }
+
+        /*
+         * 3. Лише повністю валідний образ
+         *    дозволено зробити pending.
+         */
+        if (!boot_set_pending(inactive_slot))
+        {
+            ota_rx.status = OTA_STATUS_ERROR;
+            ota_rx.active = 0u;
+            return 1;
+        }
+
+        /*
+         * pending_slot вже атомарно опублікований
+         * у BootMeta.
+         */
+        ota_rx.status = OTA_STATUS_READY;
+        ota_rx.active = 0u;
+
         return 1;
     }
 
     return 0;
 }
+
+
+
 
 static char encrdata_reserve(unsigned int len)
 {
@@ -1293,16 +1977,6 @@ unsigned int i;
     APPEND_STR("0802");    // Номер и статус параметра
     //LtoChars(rm_result, &encrdata[lendata]);  			// ДОРАБОТАТЬ!!! Напряжение питания датчиков - результат вычисления RMS
     APPEND_LTOA(sens.a[7].dat);  		// Данные. Число с плавающей точкой
-/*
-    for(i=0; i<8; i++){
-        HTOA(sens.a[i].ind, &encrdata[lendata]);       // Код состояния параметра. 1 - неиспользуется, 2 - используется, 3 - обрыв датчика
-        lendata += 2;
-        HTOA(sens.a[i].stat, &encrdata[lendata]);      // Номер параметра
-        lendata += 2;
-        LtoChars(sens.a[i].dat, &encrdata[lendata]);   // Данные.
-        lendata += 8;
-    }
-// */
 //sens_str d[8];  // Цифровые входы устройства
 // 9	"0902" длина += 8; - ПЗК
     APPEND_STR("0902");    // Номер и статус параметра
@@ -1328,15 +2002,6 @@ unsigned int i;
 // 16	"1002" длина += 8; - CSQ - качество GSM сигнала
     APPEND_STR("1002");    // Номер и статус параметра
     APPEND_LTOA(sens.d[7].dat);  		// Данные.
-/*    for(i=0; i<8; i++){
-        HTOA(sens.d[i].ind, &encrdata[lendata]);
-        lendata += 2;
-        HTOA(sens.d[i].stat, &encrdata[lendata]);
-        lendata += 2;
-        LtoChars(sens.d[i].dat, &encrdata[lendata]);
-        lendata += 8;
-    }
-// */
 //sens_str v[2];  // Внутренние параметры устройства: температура и питание.
 // 17	"1102" длина += 8; - Тскм температура MSP430FR
     APPEND_STR("1102");    // Номер и статус параметра
@@ -1344,22 +2009,31 @@ unsigned int i;
 // 18	"1202" длина += 8; - Uпит напряжения питания MSP430FR
     APPEND_STR("1202");    // Номер и статус параметра
     APPEND_LTOA(sens.v[1].dat);  		// Данные.
-/*
-    for(i=0; i<2; i++){
-        HTOA(sens.v[i].ind, &encrdata[lendata]);
-        lendata += 2;
-        HTOA(sens.v[i].stat, &encrdata[lendata]);
-        lendata += 2;
-        LtoChars(sens.v[i].dat, &encrdata[lendata]);
-        lendata += 8;
+    //
+    //************************************************************************************************
+    /*
+     * Під час OTA замість p2 відправляємо компактне
+     * підтвердження стану OTA.
+     *
+     * Format:
+     *   &o=SSRRRRRRRR
+     *
+     * SS       - status, HEX
+     * RRRRRRRR - received bytes, HEX
+     */
+    if (ota_get_status() != OTA_STATUS_IDLE)
+    {
+        APPEND_STR("&o=");
+        APPEND_HTOA(ota_get_status());
+        APPEND_LTOA(ota_get_received());
+    }
+    else
+    {
+        APPEND_STR("&p2=110002000201020000");
+        APPEND_HTOA(ROM_NO[1]);
+        APPEND_HTOA(ROM_NO[0]);
     }
 // */
-    // ************************************************************************************************
-    // Создаем пакет 2:
-    APPEND_STR("&p2=110002000201020000");    // Номер пакета
-    // Записуєм значення датчика температури
-    APPEND_HTOA(ROM_NO[1]);
-    APPEND_HTOA(ROM_NO[0]);
     //
     // 3. Окончание пакета данных
     //*******************************************************************************************
@@ -1393,7 +2067,7 @@ char bfer[5],i;
 char date_text[20];
 unsigned int parsed_pack_time;
 unsigned long scaled_pack_time;
-#define REMOTE_COMMAND_SIZE 32u
+#define REMOTE_COMMAND_SIZE 64u
 //
 //*************************************************************************************************
 //

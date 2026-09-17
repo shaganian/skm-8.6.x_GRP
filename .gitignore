@@ -11,3 +11,7 @@ Release/
 *.obj
 *.log
 *.tmp
+
+# Local logs and build artifacts
+Log/
+builds/

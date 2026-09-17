@@ -115,7 +115,7 @@
                         </toolChain>
                     </folderInfo>
                     <sourceEntries>
-                        <entry excluding="lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c|drivers/utilites_copy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                     </sourceEntries>
                 </configuration>
             </storageModule>
@@ -227,7 +227,7 @@
                         </toolChain>
                     </folderInfo>
                     <sourceEntries>
-                        <entry excluding="drivers/utilites_copy.c|drivers/modem_sim900_33.c|drivers/modem_sim900_32.c|lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c|lnk_msp430fr5949.cmd|lnk_msp430fr5949_slot_b.cmd" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c|lnk_msp430fr5949.cmd|lnk_msp430fr5949_slot_b.cmd" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                     </sourceEntries>
                 </configuration>
             </storageModule>

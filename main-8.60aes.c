@@ -939,9 +939,9 @@ struct {
                         //
                         //------------------------------------  1234567890123456789012               Р1.0 Р1.1 Р1.2 Р3.0
                         //i2c_SetAddress(0, LINE1); i2c_PutStr(" 21.5 1111 >9999 3600 "); // статус,  цифровые входы,     адр.СКМ, таймер.
-                        i2c_SetAddress( 0, LINE1);i2c_PutStr("8.60s      >");
+                        i2c_SetAddress( 0, LINE1);i2c_PutStr("8.61s      >");
                         i2c_SetAddress(38, LINE1);i2c_PutMultySimb((const char *)&digit, 4);            // Выводим значение цифровых входов
-                        i2c_SetAddress(70, LINE1);i2c_PutMultySimb_znach((const char *) &pack.addr,5);  // Выводим адрес устройства
+                        i2c_SetAddress(70, LINE1);i2c_PutMultySimb((const char *) &pack.addr,5);  // Выводим адрес устройства
                         // time_transmit
                         if(pack_time < time_transmit)time_transmit=pack_time;
                         ItoDecAShot_bn((pack_time - time_transmit), &ttt[0]);

@@ -111,6 +111,7 @@ typedef struct ota_rx_state
 } ota_rx_state;
 
 static ota_rx_state ota_rx;
+static unsigned char ota_resume_checked = 0u;
 
 #define OTA_STATUS_IDLE        0u
 #define OTA_STATUS_STARTED     1u
@@ -118,13 +119,70 @@ static ota_rx_state ota_rx;
 #define OTA_STATUS_READY       3u
 #define OTA_STATUS_ERROR       0x80u
 
+#define OTA_IMAGE_TOTAL_SIZE      30440UL
+
+#define OTA_SLOT_A                0u
+#define OTA_SLOT_B                1u
+#define OTA_SLOT_NONE             0xFFu
+
+/*
+ * OTA resume journal.
+ *
+ * Reserved FRAM:
+ *
+ *   0x46C0..0x46DF  Record 0
+ *   0x46E0..0x46FF  Record 1
+ *
+ * Two alternating records protect against power loss
+ * while a checkpoint is being written.
+ */
+#define OTA_JOURNAL_MAGIC          0x4F4Au
+#define OTA_JOURNAL_VERSION        1u
+#define OTA_JOURNAL_FLAG_ACTIVE    0x01u
+
+#define OTA_JOURNAL_RECORD0_ADDR   0x046C0UL
+#define OTA_JOURNAL_RECORD1_ADDR   0x046E0UL
+#define OTA_JOURNAL_RECORD_SIZE    32u
+#define OTA_JOURNAL_CRC_SIZE       28u
+
+typedef struct ota_journal_record
+{
+    unsigned int  magic;
+    unsigned int  version;
+    unsigned int  sequence;
+    unsigned char target_slot;
+    unsigned char flags;
+
+    unsigned long image_size;
+    unsigned long expected_crc32;
+    unsigned long received;
+    unsigned long running_crc32;
+
+    unsigned long reserved;
+    unsigned long record_crc32;
+} ota_journal_record;
+
+/*
+ * Compile-time protection against accidental structure
+ * layout changes.
+ */
+typedef char ota_journal_record_size_must_be_32[
+    (sizeof(ota_journal_record) == OTA_JOURNAL_RECORD_SIZE)
+        ? 1
+        : -1
+];
+
+static void ota_resume_restore_once(void);
+
 unsigned char ota_get_status(void)
 {
+    ota_resume_restore_once();
     return ota_rx.status;
 }
 
 unsigned long ota_get_received(void)
 {
+    ota_resume_restore_once();
     return ota_rx.received;
 }
 
@@ -230,6 +288,310 @@ static unsigned long ota_crc32_update(unsigned long crc,
 
 
 
+
+/*
+ * Calculate CRC32 of the first 28 bytes of a journal record.
+ * record_crc32 itself is excluded.
+ */
+static unsigned long ota_journal_record_crc(
+    const ota_journal_record *record)
+{
+    unsigned long crc;
+
+    crc = 0xFFFFFFFFUL;
+
+    crc = ota_crc32_update(
+        crc,
+        (const unsigned char *)record,
+        OTA_JOURNAL_CRC_SIZE);
+
+    return crc ^ 0xFFFFFFFFUL;
+}
+
+
+/*
+ * Copy one 32-byte journal record from FRAM to RAM.
+ */
+static void ota_journal_read_record(
+    unsigned long address,
+    ota_journal_record *record)
+{
+    unsigned int i;
+    unsigned char *dst;
+
+    dst = (unsigned char *)record;
+
+    for (i = 0u; i < OTA_JOURNAL_RECORD_SIZE; i++)
+    {
+        dst[i] = __data20_read_char(address + i);
+    }
+}
+
+
+/*
+ * Check magic/version/content CRC.
+ */
+static unsigned char ota_journal_record_valid(
+    const ota_journal_record *record)
+{
+    if (record->magic != OTA_JOURNAL_MAGIC)
+    {
+        return 0u;
+    }
+
+    if (record->version != OTA_JOURNAL_VERSION)
+    {
+        return 0u;
+    }
+
+    if ((record->flags & OTA_JOURNAL_FLAG_ACTIVE) == 0u)
+    {
+        return 0u;
+    }
+
+    if ((record->target_slot != OTA_SLOT_A) &&
+        (record->target_slot != OTA_SLOT_B))
+    {
+        return 0u;
+    }
+
+    if (record->image_size != OTA_IMAGE_TOTAL_SIZE)
+    {
+        return 0u;
+    }
+
+    if (record->received > record->image_size)
+    {
+        return 0u;
+    }
+
+    if (record->record_crc32 !=
+        ota_journal_record_crc(record))
+    {
+        return 0u;
+    }
+
+    return 1u;
+}
+
+
+/*
+ * Sequence comparison that also survives uint16 wraparound.
+ */
+static unsigned char ota_journal_sequence_newer(
+    unsigned int a,
+    unsigned int b)
+{
+    unsigned int delta;
+
+    delta = (unsigned int)(a - b);
+
+    return ((delta != 0u) && (delta < 0x8000u))
+        ? 1u
+        : 0u;
+}
+
+
+/*
+ * Load newest valid record.
+ *
+ * source_address may be NULL.
+ *
+ * Return:
+ *   1 = valid journal exists
+ *   0 = no valid journal
+ */
+static unsigned char ota_journal_load_latest(
+    ota_journal_record *record,
+    unsigned long *source_address)
+{
+    ota_journal_record r0;
+    ota_journal_record r1;
+
+    unsigned char valid0;
+    unsigned char valid1;
+
+    ota_journal_read_record(
+        OTA_JOURNAL_RECORD0_ADDR,
+        &r0);
+
+    ota_journal_read_record(
+        OTA_JOURNAL_RECORD1_ADDR,
+        &r1);
+
+    valid0 = ota_journal_record_valid(&r0);
+    valid1 = ota_journal_record_valid(&r1);
+
+    if (!valid0 && !valid1)
+    {
+        return 0u;
+    }
+
+    if (valid0 &&
+        (!valid1 ||
+         ota_journal_sequence_newer(
+             r0.sequence,
+             r1.sequence)))
+    {
+        *record = r0;
+
+        if (source_address != 0)
+        {
+            *source_address =
+                OTA_JOURNAL_RECORD0_ADDR;
+        }
+
+        return 1u;
+    }
+
+    *record = r1;
+
+    if (source_address != 0)
+    {
+        *source_address =
+            OTA_JOURNAL_RECORD1_ADDR;
+    }
+
+    return 1u;
+}
+
+
+/*
+ * Store a new journal checkpoint.
+ *
+ * Power-loss safety:
+ *
+ *   1. invalidate destination magic
+ *   2. write bytes 2..31
+ *   3. publish magic LAST
+ *
+ * Therefore an interrupted new record cannot replace the
+ * previously valid record.
+ */
+static unsigned char ota_journal_store(
+    const ota_journal_record *value)
+{
+    ota_journal_record current;
+    ota_journal_record next;
+    ota_journal_record verify;
+
+    unsigned long current_address;
+    unsigned long destination;
+
+    unsigned char *src;
+    unsigned int i;
+
+    next = *value;
+
+    if (ota_journal_load_latest(
+            &current,
+            &current_address))
+    {
+        next.sequence =
+            (unsigned int)(current.sequence + 1u);
+
+        if (current_address ==
+            OTA_JOURNAL_RECORD0_ADDR)
+        {
+            destination =
+                OTA_JOURNAL_RECORD1_ADDR;
+        }
+        else
+        {
+            destination =
+                OTA_JOURNAL_RECORD0_ADDR;
+        }
+    }
+    else
+    {
+        next.sequence = 1u;
+        destination = OTA_JOURNAL_RECORD0_ADDR;
+    }
+
+    next.magic = OTA_JOURNAL_MAGIC;
+    next.version = OTA_JOURNAL_VERSION;
+    next.flags |= OTA_JOURNAL_FLAG_ACTIVE;
+    next.record_crc32 = 0UL;
+
+    next.record_crc32 =
+        ota_journal_record_crc(&next);
+
+    src = (unsigned char *)&next;
+
+    /*
+     * Invalidate destination first.
+     */
+    __data20_write_char(destination + 0UL, 0u);
+    __data20_write_char(destination + 1UL, 0u);
+
+    /*
+     * Write everything except magic.
+     */
+    for (i = 2u; i < OTA_JOURNAL_RECORD_SIZE; i++)
+    {
+        __data20_write_char(
+            destination + i,
+            src[i]);
+    }
+
+    /*
+     * Publish magic last.
+     */
+    __data20_write_char(
+        destination + 0UL,
+        src[0]);
+
+    __data20_write_char(
+        destination + 1UL,
+        src[1]);
+
+    /*
+     * Full read-back validation.
+     */
+    ota_journal_read_record(
+        destination,
+        &verify);
+
+    if (!ota_journal_record_valid(&verify))
+    {
+        return 0u;
+    }
+
+    if (verify.sequence != next.sequence)
+    {
+        return 0u;
+    }
+
+    return 1u;
+}
+
+
+/*
+ * Invalidate both copies.
+ *
+ * Only the magic field must be cleared; all other bytes may
+ * remain unchanged because such a record is no longer valid.
+ */
+static void ota_journal_clear(void)
+{
+    __data20_write_char(
+        OTA_JOURNAL_RECORD0_ADDR + 0UL,
+        0u);
+
+    __data20_write_char(
+        OTA_JOURNAL_RECORD0_ADDR + 1UL,
+        0u);
+
+    __data20_write_char(
+        OTA_JOURNAL_RECORD1_ADDR + 0UL,
+        0u);
+
+    __data20_write_char(
+        OTA_JOURNAL_RECORD1_ADDR + 1UL,
+        0u);
+}
+
+
 /*
  * Canonical OTA image layout.
  *
@@ -245,7 +607,6 @@ static unsigned long ota_crc32_update(unsigned long crc,
 #define OTA_IMAGE_HEADER_SIZE     44UL
 #define OTA_IMAGE_LOW_SIZE        0x56C0UL
 #define OTA_IMAGE_HIGH_SIZE       0x1FFCUL
-#define OTA_IMAGE_TOTAL_SIZE      30440UL
 
 #define OTA_SLOT_A_HEADER_ADDR    0x05000UL
 #define OTA_SLOT_A_LOW_ADDR       0x05100UL
@@ -255,9 +616,6 @@ static unsigned long ota_crc32_update(unsigned long crc,
 #define OTA_SLOT_B_LOW_ADDR       0x0A8C0UL
 #define OTA_SLOT_B_HIGH_ADDR      0x11FFCUL
 
-#define OTA_SLOT_A                0u
-#define OTA_SLOT_B                1u
-#define OTA_SLOT_NONE             0xFFu
 
 
 static unsigned char ota_current_slot(void)
@@ -295,6 +653,103 @@ static unsigned char ota_inactive_slot(void)
     }
 
     return OTA_SLOT_NONE;
+}
+
+
+
+/*
+ * Save one power-loss-safe OTA checkpoint.
+ *
+ * received/running_crc32 may describe the NEXT state which
+ * has not yet been published to ota_rx RAM.
+ */
+static unsigned char ota_resume_checkpoint(
+    unsigned long received,
+    unsigned long running_crc32)
+{
+    ota_journal_record record;
+    unsigned char target_slot;
+
+    target_slot = ota_inactive_slot();
+
+    if (target_slot == OTA_SLOT_NONE)
+    {
+        return 0u;
+    }
+
+    record.magic = OTA_JOURNAL_MAGIC;
+    record.version = OTA_JOURNAL_VERSION;
+    record.sequence = 0u;
+    record.target_slot = target_slot;
+    record.flags = OTA_JOURNAL_FLAG_ACTIVE;
+
+    record.image_size = ota_rx.size;
+    record.expected_crc32 = ota_rx.expected_crc32;
+    record.received = received;
+    record.running_crc32 = running_crc32;
+
+    record.reserved = 0UL;
+    record.record_crc32 = 0UL;
+
+    return ota_journal_store(&record);
+}
+
+
+/*
+ * Restore interrupted OTA after reset/power loss.
+ *
+ * The journal is valid only while its target is still the
+ * inactive Slot.  If target_slot has become the running Slot,
+ * the record belongs to an already completed update and is
+ * discarded.
+ */
+static void ota_resume_restore_once(void)
+{
+    ota_journal_record record;
+    unsigned char inactive_slot;
+
+    if (ota_resume_checked)
+    {
+        return;
+    }
+
+    ota_resume_checked = 1u;
+
+    if (!ota_journal_load_latest(&record, 0))
+    {
+        return;
+    }
+
+    inactive_slot = ota_inactive_slot();
+
+    if ((inactive_slot == OTA_SLOT_NONE) ||
+        (record.target_slot != inactive_slot))
+    {
+        ota_journal_clear();
+        return;
+    }
+
+    ota_rx.active = 1u;
+
+    if (record.received == 0UL)
+    {
+        ota_rx.status = OTA_STATUS_STARTED;
+    }
+    else
+    {
+        ota_rx.status = OTA_STATUS_CHUNK_OK;
+    }
+
+    ota_rx.chunks = 0u;
+    ota_rx.size = record.image_size;
+    ota_rx.expected_crc32 = record.expected_crc32;
+    ota_rx.running_crc32 = record.running_crc32;
+    ota_rx.received = record.received;
+
+    /*
+     * Continue OTA communication quickly after restart.
+     */
+    pack_time = 3u;
 }
 
 
@@ -793,6 +1248,12 @@ static char ota_remote_command(void)
     unsigned char data[16];
     unsigned int data_len;
     unsigned char inactive_slot;
+    unsigned long new_size;
+    unsigned long new_crc32;
+    unsigned long next_received;
+    unsigned long next_running_crc32;
+
+    ota_resume_restore_once();
 
     if ((encrdata[0] != 'o') || (encrdata[2] != '=')) {
         return 0;
@@ -804,20 +1265,75 @@ static char ota_remote_command(void)
             ota_rx.status = OTA_STATUS_ERROR;
             return 1;
         }
-        if (!ota_parse_dec(&pos, &ota_rx.size)) return 1;
-        if ((ota_rx.size != OTA_IMAGE_TOTAL_SIZE) ||
-            !ota_expect_char(&pos, ',')) {
+
+        if (!ota_parse_dec(&pos, &new_size)) return 1;
+
+        if ((new_size != OTA_IMAGE_TOTAL_SIZE) ||
+            !ota_expect_char(&pos, ','))
+        {
             ota_rx.status = OTA_STATUS_ERROR;
             return 1;
         }
-        if (!ota_parse_hex_fixed(&pos, 8u, &ota_rx.expected_crc32)) return 1;
+
+        if (!ota_parse_hex_fixed(
+                &pos,
+                8u,
+                &new_crc32))
+        {
+            return 1;
+        }
+
         if (!ota_expect_char(&pos, ';')) return 1;
 
-        ota_rx.active = 1;
+        /*
+         * Idempotent START:
+         *
+         * After reset the server may send ou again.
+         * If package identity is unchanged, preserve the
+         * restored offset and rolling CRC.
+         */
+        if (ota_rx.active &&
+            (ota_rx.size == new_size) &&
+            (ota_rx.expected_crc32 == new_crc32))
+        {
+            if (ota_rx.received == 0UL)
+            {
+                ota_rx.status = OTA_STATUS_STARTED;
+            }
+            else
+            {
+                ota_rx.status = OTA_STATUS_CHUNK_OK;
+            }
+
+            pack_time = 3u;
+            return 1;
+        }
+
+        /*
+         * Different package: old resume state is obsolete.
+         */
+        ota_journal_clear();
+
+        ota_rx.active = 1u;
         ota_rx.status = OTA_STATUS_STARTED;
-        ota_rx.chunks = 0;
-        ota_rx.received = 0;
+        ota_rx.chunks = 0u;
+        ota_rx.size = new_size;
+        ota_rx.expected_crc32 = new_crc32;
+        ota_rx.received = 0UL;
         ota_rx.running_crc32 = 0xFFFFFFFFUL;
+
+        /*
+         * Publish the initial checkpoint before acknowledging
+         * the new OTA session.
+         */
+        if (!ota_resume_checkpoint(
+                ota_rx.received,
+                ota_rx.running_crc32))
+        {
+            ota_rx.active = 0u;
+            ota_rx.status = OTA_STATUS_ERROR;
+            return 1;
+        }
 
         pack_time = 3u;
 
@@ -936,13 +1452,32 @@ static char ota_remote_command(void)
             return 1;
         }
 
-        ota_rx.running_crc32 =
+        next_running_crc32 =
             ota_crc32_update(
                 ota_rx.running_crc32,
                 data,
                 data_len);
 
-        ota_rx.received += data_len;
+        next_received =
+            ota_rx.received +
+            (unsigned long)data_len;
+
+        /*
+         * Commit the new offset/CRC to FRAM BEFORE the RAM
+         * state is advanced and therefore before ACK can expose
+         * the new received value.
+         */
+        if (!ota_resume_checkpoint(
+                next_received,
+                next_running_crc32))
+        {
+            ota_rx.status = OTA_STATUS_ERROR;
+            ota_rx.active = 0u;
+            return 1;
+        }
+
+        ota_rx.running_crc32 = next_running_crc32;
+        ota_rx.received = next_received;
         ota_rx.chunks++;
         ota_rx.status = OTA_STATUS_CHUNK_OK;
 
@@ -1006,7 +1541,15 @@ static char ota_remote_command(void)
         /*
          * pending_slot вже атомарно опублікований
          * у BootMeta.
+         *
+         * Resume journal більше не потрібен.
+         * Якщо живлення зникне між boot_set_pending()
+         * та clear(), новий Slot після boot визначить,
+         * що journal target вже не є inactive Slot,
+         * і відкине цей застарілий journal.
          */
+        ota_journal_clear();
+
         ota_rx.status = OTA_STATUS_READY;
         ota_rx.active = 0u;
 

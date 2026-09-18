@@ -67,7 +67,8 @@ MEMORY
      * BOOT_AREA and BOOT_META are reserved for future A/B OTA support.
      * Signatures, vectors and RESET are still owned by the application at this test stage.
      */
-    SHARED_FRAM : origin = 0x4400,  length = 0x0300
+    SHARED_FRAM : origin = 0x4400,  length = 0x02C0
+    OTA_JOURNAL : origin = 0x46C0,  length = 0x0040
     BOOT_META   : origin = 0x4700,  length = 0x0100
     BOOT_AREA   : origin = 0x4800,  length = 0x0800
 

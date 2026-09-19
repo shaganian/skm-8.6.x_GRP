@@ -1,3 +1,4 @@
+#include "firmware_version.h"
 #include "system.h"
 #include "drivers/rdx0154.h"            // Утилиты обслуживания LCD и клавиатуры
 #include <stdint.h>
@@ -75,7 +76,7 @@ const AppHeader g_app_header =
 //const char vers[]   ="СКМ-8.51aes.ШГРП"; // 21.01.2026 -  кодування в AES-256 пакет даних для передачі на сервер
 //const char vers[]   ="СКМ-8.52aes.ШГРП"; // 29.03.2026 - Підключаєм таймер WDT на час вимірювання RMS
 //const char vers[]   ="\xd1\xca\xcc-8.60aes.\xd8\xc3\xd0\xcf"; // 19.05.2026 - Вхід в меню - на старті утримувати 2 кнопку.
-const char vers[]   ="СКМ-8.60aes.ШГРП"; // 19.05.2026 - Вхід в меню - на старті утримувати 2 кнопку.
+const char vers[]   = FW_PRODUCT_STRING; // 19.05.2026 - Вхід в меню - на старті утримувати 2 кнопку.
 //
 volatile uint16_t time_transmit;         // Глобальный счетчик - передача данных на сервер
 volatile uint16_t start_transmit;
@@ -686,7 +687,7 @@ struct {
             //i2c_SetAddress(20, LINE1); i2c_PutStr(&vers[0]);                                             // текст на экран
             //------------------------------------1234567890123456789012               Р1.0 Р1.1 Р1.2 Р3.0
             //i2c_SetAddress(0, LINE1); i2c_PutStr(" 21.5 1111 >9999 3600 "); // статус,  цифровые входы,     адр.СКМ, таймер.
-            i2c_SetAddress( 0, LINE1);  i2c_PutStrUtf8("8.60s      >");
+            i2c_SetAddress( 0, LINE1);  i2c_PutStrUtf8(FW_VERSION_DISPLAY);
             i2c_SetAddress(38, LINE1);i2c_PutMultySimb((const char *)&digit, 4);            // Выводим значение дискретных входов
             i2c_SetAddress(70, LINE1);i2c_PutMultySimb_znach((const char *)&pack.addr, 5);
             // time_transmit
@@ -939,7 +940,7 @@ struct {
                         //
                         //------------------------------------  1234567890123456789012               Р1.0 Р1.1 Р1.2 Р3.0
                         //i2c_SetAddress(0, LINE1); i2c_PutStr(" 21.5 1111 >9999 3600 "); // статус,  цифровые входы,     адр.СКМ, таймер.
-                        i2c_SetAddress( 0, LINE1);i2c_PutStr("8.61s      >");
+                        i2c_SetAddress( 0, LINE1);i2c_PutStr(FW_VERSION_DISPLAY);
                         i2c_SetAddress(38, LINE1);i2c_PutMultySimb((const char *)&digit, 4);            // Выводим значение цифровых входов
                         i2c_SetAddress(70, LINE1);i2c_PutMultySimb((const char *) &pack.addr,5);  // Выводим адрес устройства
                         // time_transmit

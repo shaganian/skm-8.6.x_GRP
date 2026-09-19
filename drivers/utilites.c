@@ -198,9 +198,13 @@ static unsigned char ota_is_hex(unsigned char c)
            ((c >= 'a') && (c <= 'f'));
 }
 
+#define OTA_REMOTE_COMMAND_SIZE 160u
+#define OTA_NETWORK_CHUNK_SIZE   64u
+#define OTA_FRAM_WRITE_SIZE      16u
+
 static unsigned char ota_expect_char(unsigned int *pos, unsigned char c)
 {
-    if ((*pos >= 64u) || (encrdata[*pos] != c)) {
+    if ((*pos >= OTA_REMOTE_COMMAND_SIZE) || (encrdata[*pos] != c)) {
         ota_rx.status = OTA_STATUS_ERROR;
         return 0;
     }
@@ -213,7 +217,7 @@ static unsigned char ota_parse_dec(unsigned int *pos, unsigned long *value)
     unsigned char digits = 0;
     unsigned long out = 0;
 
-    while ((*pos < 64u) && ota_is_digit(encrdata[*pos])) {
+    while ((*pos < OTA_REMOTE_COMMAND_SIZE) && ota_is_digit(encrdata[*pos])) {
         out = (out * 10u) + (unsigned long)(encrdata[*pos] - '0');
         (*pos)++;
         digits++;
@@ -234,7 +238,7 @@ static unsigned char ota_parse_hex_fixed(unsigned int *pos,
     unsigned long out = 0;
 
     for (i = 0; i < digits; i++) {
-        if ((*pos >= 64u) || !ota_is_hex(encrdata[*pos])) {
+        if ((*pos >= OTA_REMOTE_COMMAND_SIZE) || !ota_is_hex(encrdata[*pos])) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 0;
         }
@@ -1097,7 +1101,7 @@ static unsigned char ota_write_logical_chunk(
     unsigned int part;
     unsigned int done = 0u;
 
-    if ((data == 0) || (len == 0u) || (len > 16u))
+    if ((data == 0) || (len == 0u) || (len > OTA_NETWORK_CHUNK_SIZE))
     {
         return 0u;
     }
@@ -1148,6 +1152,15 @@ static unsigned char ota_write_logical_chunk(
         if ((unsigned long)part > remaining_to_boundary)
         {
             part = (unsigned int)remaining_to_boundary;
+        }
+
+        /*
+         * One network chunk may be up to 64 bytes.
+         * Keep each physical FRAM write at <=16 bytes.
+         */
+        if (part > OTA_FRAM_WRITE_SIZE)
+        {
+            part = OTA_FRAM_WRITE_SIZE;
         }
 
         if (!ota_fram_write_chunk20(
@@ -1217,12 +1230,12 @@ static unsigned char ota_parse_hex_data(unsigned int *pos,
 {
     unsigned int out_len = 0;
 
-    while ((*pos < 64u) && ota_is_hex(encrdata[*pos])) {
-        if (((*pos + 1u) >= 64u) || !ota_is_hex(encrdata[*pos + 1u])) {
+    while ((*pos < OTA_REMOTE_COMMAND_SIZE) && ota_is_hex(encrdata[*pos])) {
+        if (((*pos + 1u) >= OTA_REMOTE_COMMAND_SIZE) || !ota_is_hex(encrdata[*pos + 1u])) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 0;
         }
-        if (out_len >= 16u) {
+        if (out_len >= OTA_NETWORK_CHUNK_SIZE) {
             ota_rx.status = OTA_STATUS_ERROR;
             return 0;
         }
@@ -1245,7 +1258,7 @@ static char ota_remote_command(void)
     unsigned int pos = 3;
     unsigned long value;
     unsigned long crc_value;
-    unsigned char data[16];
+    unsigned char data[OTA_NETWORK_CHUNK_SIZE];
     unsigned int data_len;
     unsigned char inactive_slot;
     unsigned long new_size;
@@ -2415,6 +2428,7 @@ void httpreq_smart (void)
 #define APPEND_LTOA(data)       do { if (!encrdata_append_ltoa(data)) return; } while (0)
 #define APPEND_HTOA(data)       do { if (!encrdata_append_htoa(data)) return; } while (0)
 unsigned int i;
+unsigned char current_slot;
  //   unsigned int lenreq,lenhead,lendata;
 //unsigned int dataplace=0;
 //unsigned char i;
@@ -2481,6 +2495,24 @@ unsigned int i;
     else {
         APPEND_BYTE(config.addr[4]);
     }
+
+    /*
+     * Повідомляємо серверу фактичний Slot,
+     * з якого зараз виконується application.
+     *
+     * as=A / as=B використовується сервером
+     * тільки як active_slot. Target Slot
+     * сервер визначає самостійно.
+     */
+    current_slot = boot_get_current_slot();
+
+    if (current_slot == BOOT_SLOT_A) {
+        APPEND_STR("&as=A");
+    }
+    else if (current_slot == BOOT_SLOT_B) {
+        APPEND_STR("&as=B");
+    }
+
     // ************************************************************************************************
     // Создаем пакет 1:
     APPEND_STR("&p1=1100010001");    // Номер пакета

@@ -65,6 +65,27 @@ extern uint8_t CipherKey[32];
 extern uint8_t DataAESencrypted[16];       // Зашифровані дані
 extern uint8_t DataAESdecrypted[16];       // Розшифровані дані
 //
+
+/*
+ * Software BOR reset MCU.
+ *
+ * Використовується після того, як OTA READY вже переданий
+ * серверу і HTTP-відповідь успішно отримана.
+ */
+static void ota_software_reset(void)
+{
+    PMMCTL0 = PMMPW | PMMSWBOR;
+
+    /*
+     * Після запису PMMSWBOR MCU повинен одразу піти у reset.
+     * Цикл тут лише як страховка для компілятора.
+     */
+    for (;;)
+    {
+        __no_operation();
+    }
+}
+
 static char is_dec_digit(unsigned char c)
 {
     return ((c >= '0') && (c <= '9'));
@@ -1021,8 +1042,15 @@ if(!connected){
 
                 if (remote_payload_find_before_closed(
                         result_remote_command,
-                        128u,
+                        320u,
                         &remote_payload_start))
+                {
+                    remote_payload_hex_len = 320u;
+                }
+                else if (remote_payload_find_before_closed(
+                             result_remote_command,
+                             128u,
+                             &remote_payload_start))
                 {
                     remote_payload_hex_len = 128u;
                 }
@@ -1045,7 +1073,7 @@ if(!connected){
                  * Clear plaintext area so that the short
                  * 32-byte protocol cannot leave stale bytes.
                  */
-                for (i = 0; i < 64u; i++) {
+                for (i = 0; i < 160u; i++) {
                     encrdata[i] = 0;
                 }
 
@@ -1094,6 +1122,20 @@ if(!connected){
 
                 // Устанавливаем время интервалов между передачами на сервер
                 result_remote_command = parse_remote_command();
+
+                /*
+                 * OTA READY вже був переданий серверу саме
+                 * в цьому HTTP-запиті, а відповідь сервера
+                 * успішно отримана і розібрана.
+                 *
+                 * Тепер безпечно виконати BOR reset:
+                 * bootloader побачить pending_slot і
+                 * запустить нову firmware як trial.
+                 */
+                if (ota_get_status() == 3u)
+                {
+                    ota_software_reset();
+                }
 
                 /*
                  * OTA multi-chunk:

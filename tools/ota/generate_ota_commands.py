@@ -15,7 +15,7 @@ HIGH_START = 0x11FFC
 HIGH_SIZE  = 0x1FFC
 
 OTA_SIZE = HEADER_SIZE + LOW_SIZE + HIGH_SIZE
-CHUNK_SIZE = 16
+CHUNK_SIZE = 64
 
 
 def crc16_ccitt(data: bytes) -> int:
@@ -119,7 +119,7 @@ def main():
             f"{chunk.hex().upper()};"
         )
 
-        if len(command) > 64:
+        if len(command) > 160:
             raise RuntimeError(
                 f"Command too long ({len(command)} bytes): "
                 f"{command}"

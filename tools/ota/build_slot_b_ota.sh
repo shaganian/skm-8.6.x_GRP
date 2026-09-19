@@ -6,7 +6,7 @@ REL="$ROOT/Release"
 
 HEX430="/home/skydom/ti/ccs2100/ccs/tools/compiler/ti-cgt-msp430_21.6.2.LTS/bin/hex430"
 
-OUT="skm-8.6.x_GRP_slot_b_vlo"
+OUT="skm-8.7.x_GRP_slot_b_vlo"
 OTA="${OUT}_ota.txt"
 
 cd "$REL"
@@ -19,9 +19,9 @@ sed -i \
   -e '/"\.\/boot_start\.obj"/d' \
   -e '/"\.\/bootloader\.obj"/d' \
   -e 's/lnk_msp430fr5949_slot_a\.cmd/lnk_msp430fr5949_slot_b.cmd/g' \
-  -e 's/skm-8\.6\.x_GRP\.out/skm-8.6.x_GRP_slot_b_vlo.out/g' \
-  -e 's/skm-8\.6\.x_GRP\.map/skm-8.6.x_GRP_slot_b_vlo.map/g' \
-  -e 's/skm-8\.6\.x_GRP_linkInfo\.xml/skm-8.6.x_GRP_slot_b_vlo_linkInfo.xml/g' \
+  -e 's/skm-8\.7\.x_GRP\.out/skm-8.7.x_GRP_slot_b_vlo.out/g' \
+  -e 's/skm-8\.7\.x_GRP\.map/skm-8.7.x_GRP_slot_b_vlo.map/g' \
+  -e 's/skm-8\.7\.x_GRP_linkInfo\.xml/skm-8.7.x_GRP_slot_b_vlo_linkInfo.xml/g' \
   makefile.slot_b
 
 echo "=== Link Slot B ==="
@@ -164,11 +164,11 @@ import zlib
 src = Path(sys.argv[1])
 
 payload_file = Path(
-    "skm-8.6.x_GRP_slot_b_payload.bin"
+    "skm-8.7.x_GRP_slot_b_payload.bin"
 )
 
 final_file = Path(
-    "skm-8.6.x_GRP_slot_b_vlo_ota_crc.txt"
+    "skm-8.7.x_GRP_slot_b_vlo_ota_crc.txt"
 )
 
 mem = {}
@@ -490,10 +490,10 @@ echo
 echo "=== SHA256 ==="
 
 sha256sum "$OTA"
-sha256sum skm-8.6.x_GRP_slot_b_payload.bin
-sha256sum skm-8.6.x_GRP_slot_b_vlo_ota_crc.txt
+sha256sum skm-8.7.x_GRP_slot_b_payload.bin
+sha256sum skm-8.7.x_GRP_slot_b_vlo_ota_crc.txt
 
 echo
 echo "READY FOR OTA:"
-echo "$REL/skm-8.6.x_GRP_slot_b_vlo_ota_crc.txt"
+echo "$REL/skm-8.7.x_GRP_slot_b_vlo_ota_crc.txt"
 

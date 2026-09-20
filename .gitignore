@@ -15,3 +15,5 @@ Release/
 # Local logs and build artifacts
 Log/
 builds/
+
+dist/

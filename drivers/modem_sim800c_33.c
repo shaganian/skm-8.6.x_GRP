@@ -818,7 +818,8 @@ else if(server==6) Send_from_UART0("AT+CIPSTART=\"TCP\",\"31.42.179.214");      
          Send_from_UART0("\",\"8181\"\r\n");  // открываем соединение:
      }
      else if(server==4 || server==5 || server==6){
-         Send_from_UART0("\",\"61003\"\r\n");  // открываем соединение:
+         //Send_from_UART0("\",\"61003\"\r\n");  // открываем соединение:
+         Send_from_UART0("\",\"46104\"\r\n");  // открываем соединение:
      }
      else{
          Send_from_UART0("\",\"80\"\r\n");  // открываем соединение:

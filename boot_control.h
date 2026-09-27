@@ -18,6 +18,11 @@ uint8_t boot_confirm(void);
  */
 uint8_t boot_get_current_slot(void);
 
+/* Before START/resume: validate the running header and quiescent BootMeta.
+ * Initialize only an entirely erased (0xFF) record; verify all writes.
+ * Corrupt, inconsistent, pending or trial metadata fails closed, unchanged. */
+uint8_t boot_prepare_ota(void);
+
 /*
  * Позначає неактивний Slot як pending.
  *

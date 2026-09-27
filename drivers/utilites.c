@@ -733,6 +733,13 @@ static void ota_resume_restore_once(void)
         return;
     }
 
+    /* A restored journal must not bypass the metadata preflight. */
+    if (!boot_prepare_ota())
+    {
+        ota_rx.status = OTA_STATUS_ERROR;
+        return;
+    }
+
     ota_rx.active = 1u;
 
     if (record.received == 0UL)
@@ -1272,6 +1279,24 @@ static char ota_remote_command(void)
         return 0;
     }
 
+    /* READY is a committed state. A malformed or unrelated OTA retry must
+     * not erase it or authorize BOR. Return 2 = handled but rejected; the
+     * outer parser preserves this result for the modem delivery gate. */
+    if (ota_rx.status == OTA_STATUS_READY)
+    {
+        unsigned char accepted = 0u;
+        if (encrdata[1] == 'f' &&
+            ota_parse_hex_fixed(&pos, 8u, &crc_value) &&
+            ota_expect_char(&pos, ';') &&
+            crc_value == ota_rx.expected_crc32)
+        {
+            accepted = 1u;
+        }
+        ota_rx.status = OTA_STATUS_READY;
+        pack_time = 3u;
+        return accepted ? 1 : 2;
+    }
+
     if (encrdata[1] == 'u') {
         if (!ota_parse_dec(&pos, &value)) return 1;
         if ((value != OTA_FORMAT_VERSION) || !ota_expect_char(&pos, ',')) {
@@ -1297,6 +1322,14 @@ static char ota_remote_command(void)
         }
 
         if (!ota_expect_char(&pos, ';')) return 1;
+
+        /* Reject before journal changes or any image bytes are accepted. */
+        if (!boot_prepare_ota())
+        {
+            ota_rx.status = OTA_STATUS_ERROR;
+            ota_rx.active = 0u;
+            return 1;
+        }
 
         /*
          * Idempotent START:
@@ -1565,6 +1598,7 @@ static char ota_remote_command(void)
 
         ota_rx.status = OTA_STATUS_READY;
         ota_rx.active = 0u;
+        pack_time = 3u; /* Send READY in the next request before BOR. */
 
         return 1;
     }
@@ -2639,6 +2673,7 @@ char wait_m[5];
 char parse_remote_command(void)
 {
 char bfer[5],i;
+char ota_result;
 char date_text[20];
 unsigned int parsed_pack_time;
 unsigned long scaled_pack_time;
@@ -2646,8 +2681,9 @@ unsigned long scaled_pack_time;
 //
 //*************************************************************************************************
 //
-    if (ota_remote_command()) {
-        return 1;
+    ota_result = ota_remote_command();
+    if (ota_result) {
+        return ota_result;
     }
 
 //*************************************************************************************************

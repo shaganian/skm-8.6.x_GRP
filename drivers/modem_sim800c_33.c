@@ -86,6 +86,17 @@ static void ota_software_reset(void)
     }
 }
 
+/* sent_status belongs to the request, not the command in its response.
+ * Called only after SEND OK and receipt/decryption of the server response. */
+static void ota_reset_after_response(unsigned char sent_status,
+                                     unsigned char response_ok)
+{
+    if (sent_status == 3u && response_ok == 1u && ota_get_status() == 3u)
+    {
+        ota_software_reset();
+    }
+}
+
 static char is_dec_digit(unsigned char c)
 {
     return ((c >= '0') && (c <= '9'));
@@ -363,7 +374,8 @@ void init_uart0 (void)
 static void set_comm_retry_pack_time(unsigned int normal_pack_time)
 {
     if ((ota_get_status() == 1u) ||
-        (ota_get_status() == 2u))
+        (ota_get_status() == 2u) ||
+        (ota_get_status() == 3u))
     {
         pack_time = 3u;
     }
@@ -379,6 +391,7 @@ char send_packet (void)
 {
 unsigned char index;
 unsigned char connected;
+unsigned char ota_sent_status;
 unsigned long ota_session_start_received;
 unsigned char gprs_recover_try = 0;
 unsigned int lenreq,i,remote_payload_start;//
@@ -438,7 +451,8 @@ unsigned int aes_block;
                     i2c_SetAddress(100,LINE6); i2c_PutStr("OK 2\xe5");
                 }
                 if ((ota_get_status() == 1u) ||
-                    (ota_get_status() == 2u))
+                    (ota_get_status() == 2u) ||
+                    (ota_get_status() == 3u))
                 {
                     set_comm_retry_pack_time(424u);
                     P4OUT &= ~BIT4;
@@ -481,7 +495,8 @@ gprs_recover_cstt:
                      start_init_job=1;
                  }
                  if ((ota_get_status() == 1u) ||
-                     (ota_get_status() == 2u))
+                     (ota_get_status() == 2u) ||
+                     (ota_get_status() == 3u))
                  {
                      set_comm_retry_pack_time(424u);
                      P4OUT &= ~BIT4;
@@ -627,7 +642,8 @@ gprs_recover_cstt:
                          return 0;   // выходим из инициализации
                      }
                      if ((ota_get_status() == 1u) ||
-                         (ota_get_status() == 2u))
+                         (ota_get_status() == 2u) ||
+                         (ota_get_status() == 3u))
                      {
                          set_comm_retry_pack_time(424u);
                          P4OUT &= ~BIT4;
@@ -678,7 +694,8 @@ gprs_recover_cstt:
             }
             //
             if ((ota_get_status() == 1u) ||
-                (ota_get_status() == 2u))
+                (ota_get_status() == 2u) ||
+                (ota_get_status() == 3u))
             {
                 set_comm_retry_pack_time(424u);
                 P4OUT &= ~BIT4;
@@ -724,7 +741,8 @@ gprs_recover_cstt:
             }
             //
             if ((ota_get_status() == 1u) ||
-                (ota_get_status() == 2u))
+                (ota_get_status() == 2u) ||
+                (ota_get_status() == 3u))
             {
                 set_comm_retry_pack_time(424u);
                 P4OUT &= ~BIT4;
@@ -770,7 +788,8 @@ gprs_recover_cstt:
             }
             //
             if ((ota_get_status() == 1u) ||
-                (ota_get_status() == 2u))
+                (ota_get_status() == 2u) ||
+                (ota_get_status() == 3u))
             {
                 set_comm_retry_pack_time(424u);
                 P4OUT &= ~BIT4;
@@ -853,7 +872,8 @@ while(time_w1 < MODEM_TCP_CONNECT_TIMEOUT_MS){
             return 0;           // выходим из инициализации
         }
         if ((ota_get_status() == 1u) ||
-            (ota_get_status() == 2u))
+            (ota_get_status() == 2u) ||
+            (ota_get_status() == 3u))
         {
             set_comm_retry_pack_time(424u);
             P4OUT &= ~BIT4;
@@ -876,7 +896,8 @@ while(time_w1 < MODEM_TCP_CONNECT_TIMEOUT_MS){
             return 0;           // выходим из инициализации
         }
         if ((ota_get_status() == 1u) ||
-            (ota_get_status() == 2u))
+            (ota_get_status() == 2u) ||
+            (ota_get_status() == 3u))
         {
             set_comm_retry_pack_time(424u);
             P4OUT &= ~BIT4;
@@ -903,7 +924,8 @@ if(!connected){
         return 0;           // выходим из инициализации
     }
     if ((ota_get_status() == 1u) ||
-        (ota_get_status() == 2u))
+        (ota_get_status() == 2u) ||
+        (ota_get_status() == 3u))
     {
         set_comm_retry_pack_time(424u);
         P4OUT &= ~BIT4;
@@ -926,6 +948,7 @@ if(!connected){
 //---------------------------------------------------------------------------------------------
         for(i=0; i<sizeof(TxMbuf.buf); i++){ TxMbuf.buf[i]= 0; }   // Чистимо буфер передачі
 
+        ota_sent_status = ota_get_status();
         httpreq_smart();                            // формуемо HTTP-запит на передачу даних.
                                                     // 136 байт - заголовок в TxMbuf.buf
                                                     // 274 байт - данні в RxMbuf.buf
@@ -1003,7 +1026,7 @@ if(!connected){
 
             P4OUT &= ~BIT4;
 
-            if(ota_get_status() == 2u){
+            if(ota_get_status() == 2u || ota_get_status() == 3u){
                 pack_time = 3u;
             }
 
@@ -1124,19 +1147,8 @@ if(!connected){
                 // Устанавливаем время интервалов между передачами на сервер
                 result_remote_command = parse_remote_command();
 
-                /*
-                 * OTA READY вже був переданий серверу саме
-                 * в цьому HTTP-запиті, а відповідь сервера
-                 * успішно отримана і розібрана.
-                 *
-                 * Тепер безпечно виконати BOR reset:
-                 * bootloader побачить pending_slot і
-                 * запустить нову firmware як trial.
-                 */
-                if (ota_get_status() == 3u)
-                {
-                    ota_software_reset();
-                }
+                ota_reset_after_response(
+                    ota_sent_status, result_remote_command);
 
                 /*
                  * OTA multi-chunk:
@@ -1184,7 +1196,8 @@ if(!connected){
          * Keep the current OTA ACK/received state and retry soon.
          */
         if ((ota_get_status() == 1u) ||
-            (ota_get_status() == 2u))
+            (ota_get_status() == 2u) ||
+            (ota_get_status() == 3u))
         {
             pack_time = 3u;
         }

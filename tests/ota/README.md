@@ -1,6 +1,6 @@
 # Offline OTA regression
 
-Set `OTA_FIXTURE_DIR` to an existing audited SKM8-8.74 release directory.
+Set `OTA_FIXTURE_DIR` to an existing audited SKM8-8.74 or SKM8-8.75 release directory.
 Run with Python 3 and a host C compiler (no TI build, device or network):
 
 ```sh
@@ -13,7 +13,7 @@ The existing audited release is read only and SHA256-checked; it is not rebuilt
 or copied into this repository. The runner creates and removes host compilation
 artifacts in a temporary directory. It does not connect to a controller or DB.
 
-The harness compiles the actual BootMeta functions, OTA parser, CRC, writer,
+The harness compiles the actual BootMeta functions, OTA and ordinary response parsers, CRC, writer,
 journal, START/FINISH code and modem reset gate. The runner adapts MSP430
 unsigned int/long and code-pointer widths to 16/32 bits, relocates physical
 pointers into mock FRAM, and mocks MPU/interrupt/reset intrinsics. Compile-time
@@ -36,3 +36,8 @@ guarantee and continues to use the bootloader/journal recovery paths.
 
 Malformed or unrelated OTA responses preserve committed READY but return a
 rejection result that cannot authorize BOR. Metadata writes are range-checked.
+
+READY response regression covers valid `ft=`, absent/invalid `ft=`, repeated
+valid FINISH, rejected FINISH (return 2), and the first FINISH while the sent
+status is CHUNK_OK. The actual parser return value feeds the production reset
+gate; the reset intrinsic is counted by the host mock.

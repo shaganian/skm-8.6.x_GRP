@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /* GENERATED_HEADERS */
 
@@ -29,6 +30,12 @@ static union { uint16_t word; struct { uint8_t low, high; } byte; } mpu;
 #define OTA_FORMAT_VERSION 1u
 static uint8_t encrdata[160];
 static uint16_t pack_time;
+#define DEFAULT_PACK_TIME_TICKS 424u
+static uint16_t ixx, uxx, res_ult;
+static char date_m[20];
+static struct tm recivedate;
+static uint8_t max_day;
+static struct { char time[5]; } pack;
 
 static BootMeta *mock_meta(void) { return (BootMeta *)(fram + BOOT_META_ADDR); }
 static AppHeader *mock_header(uint32_t address)
@@ -107,7 +114,7 @@ static char request_result(const char *command)
     assert(size <= sizeof(encrdata));
     memset(encrdata, ' ', sizeof(encrdata));
     memcpy(encrdata, command, size);
-    return ota_remote_command();
+    return parse_remote_command();
 }
 
 static void request(const char *command)
@@ -285,12 +292,13 @@ static void finalization_cases(void)
 
     /* Request carried CHUNK_OK; its response contains FINISH. */
     unsigned char sent_status = ota_get_status();
-    request(commands[477]);
+    char first_result = request_result(commands[477]);
+    assert(first_result == 1);
     assert(ota_rx.status == OTA_STATUS_READY && !ota_rx.active);
     assert(mock_meta()->pending_slot == BOOT_SLOT_B);
     assert(mock_meta()->active_slot == BOOT_SLOT_A);
     assert(pack_time == 3);
-    ota_reset_after_response(sent_status, 1);
+    ota_reset_after_response(sent_status, first_result);
     assert(resets == 0);
     BootMeta before = *mock_meta(); count = writes;
     request(commands[477]);
@@ -300,10 +308,11 @@ static void finalization_cases(void)
     ota_reset_after_response(OTA_STATUS_READY, 0); /* Lost/malformed response. */
     assert(resets == 0);
     sent_status = ota_get_status(); /* Next request actually carries READY. */
-    request(commands[477]); /* Server may repeat FINISH. */
-    ota_reset_after_response(sent_status, 1);
+    char repeat_result = request_result(commands[477]); /* Server may repeat FINISH. */
+    assert(repeat_result == 1);
+    ota_reset_after_response(sent_status, repeat_result);
     assert(resets == 1 && writes == count);
-    puts("PASS: full 8.74 flow 475x64+40; exact FRAM/CRC; duplicate chunk; resume at 30440");
+    puts("PASS: full audited fixture flow 475x64+40; exact FRAM/CRC; duplicate chunk; resume at 30440");
     puts("PASS: READY precedes reset; retries preserve READY; duplicate FINISH does not write");
 
     /* Real parser failures preserve READY and cannot authorize reset. */
@@ -320,6 +329,23 @@ static void finalization_cases(void)
     ota_reset_after_response(OTA_STATUS_READY, 1);
     assert(resets == 2 && writes == count);
     puts("PASS: malformed FINISH / unrelated OTA retry preserves READY and cannot reset");
+
+    /* Ordinary server replies must traverse the actual production parser. */
+    const char *invalid_ft[] = {"time=2026-09-28 12:30:00;", "ft=;",
+                                "ft=x;", "ft=0;", "ft=12x;"};
+    unsigned resets_before = resets;
+    for (unsigned i = 0; i < sizeof(invalid_ft) / sizeof(invalid_ft[0]); i++) {
+        char result = request_result(invalid_ft[i]);
+        assert(result == 0 && ota_rx.status == OTA_STATUS_READY);
+        ota_reset_after_response(OTA_STATUS_READY, result);
+        assert(resets == resets_before && writes == count);
+    }
+    char ordinary_result = request_result("time=2026-09-28 12:30:00;ft=5;");
+    assert(ordinary_result == 1 && pack_time == 330);
+    ota_reset_after_response(OTA_STATUS_READY, ordinary_result);
+    assert(resets == resets_before + 1 && writes == count);
+    assert(!memcmp(&before, mock_meta(), sizeof(before)));
+    puts("PASS: READY + valid ft => one BOR; absent/invalid ft => no BOR");
 
     transfer();
     mock_meta()->magic = 0;

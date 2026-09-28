@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import zlib
 
 
 def function(text, name):
@@ -43,9 +44,11 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     image = args.image.read_bytes()
-    assert hashlib.sha256(image).hexdigest() == (
-        "d3cbc3d3cb9292e963c937fcb013709bb97a2c249f747e90a081a4a4f3124b35"
-    ), "Use the audited 8.74 Slot B fixture"
+    assert hashlib.sha256(image).hexdigest() in {
+        "d3cbc3d3cb9292e963c937fcb013709bb97a2c249f747e90a081a4a4f3124b35",
+        "1013e643417ae432b1f9301c3dfbd9a01f0965888953f29080174015034788e4",
+    }, "Use an audited 8.74 or 8.75 Slot B fixture"
+    fixture_crc = zlib.crc32(image)
 
     boot = (root / "boot_control.c").read_text()
     boot = re.sub(r"^#include.*$", "", boot, flags=re.M)
@@ -82,9 +85,16 @@ def main():
     )
     meta = (root / "boot_meta.h").read_text()
     harness = (root / "tests/ota/offline_test.c").read_text()
+    harness = harness.replace("BD6F8B6F", f"{fixture_crc ^ 1:08X}")
+    harness = harness.replace("BD6F8B6E", f"{fixture_crc:08X}")
     source = harness.replace("/* GENERATED_HEADERS */", header + meta)
     source = source.replace("/* GENERATED_PRODUCTION_CODE */", "\n".join([
-        abi((root / "drivers/ota_crc32.h").read_text()), abi(boot), function(util, "hex_nibble"), abi(ota), reset_gate,
+        abi((root / "drivers/ota_crc32.h").read_text()), abi(boot), function(util, "hex_nibble"), abi(ota), abi(function(util, "cmp_str_limited")),
+        abi(function(util, "buffer_has_range")),
+        # The legacy date loop uses a bounded char index; keep production code intact.
+        '#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored "-Wchar-subscripts"',
+        abi(function(util, "parse_remote_command")),
+        '#pragma GCC diagnostic pop', reset_gate,
     ]))
     with tempfile.TemporaryDirectory(prefix="skm-ota-offline-") as directory:
         test = Path(directory) / "test.c"

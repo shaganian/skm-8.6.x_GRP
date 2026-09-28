@@ -208,6 +208,44 @@ static void init_cases(void)
     puts("PASS: ambiguous header; initialization/pending read-back failure; FINISH cannot initialize");
 }
 
+static void isr_entry_cases(void)
+{
+    for (uint8_t slot = BOOT_SLOT_A; slot <= BOOT_SLOT_B; slot++) {
+        uint32_t low = slot == BOOT_SLOT_A ? 0x5100u : 0xA8C0u;
+        uint32_t high = slot == BOOT_SLOT_A ? 0x10000u : 0x11FFCu;
+        uint32_t valid[] = {low, low + 2u, low + 0x56C0u - 2u};
+        uint32_t invalid[] = {
+            0u, low - 2u, low + 1u, low + 0x56C0u - 1u,
+            low + 0x56C0u, low + 0x56C0u + 2u,
+            high, high + 0x1FFCu - 2u,
+            slot == BOOT_SLOT_A ? 0xA8C0u : 0x5100u,
+            low + 0x10000u, low + 0x100000u, UINT32_MAX
+        };
+        for (unsigned member = 0; member < 7; member++) {
+            for (unsigned test = 0; test < 15; test++) {
+                fresh(slot);
+                /* Name each field independently of the production offset walk. */
+                app_code_ptr_t *entries[] = {
+                    &g_app_header.isr_port1, &g_app_header.isr_port2,
+                    &g_app_header.isr_port3, &g_app_header.isr_wdt,
+                    &g_app_header.isr_usci_a0, &g_app_header.isr_usci_b0,
+                    &g_app_header.isr_adc12
+                };
+                *entries[member] = test < 3 ? valid[test] : invalid[test - 3];
+                if (test < 3) {
+                    assert(boot_prepare_ota());
+                    assert(mock_meta()->active_slot == slot);
+                } else {
+                    BootMeta before = *mock_meta();
+                    assert(!boot_prepare_ota() && writes == 0);
+                    assert(!memcmp(&before, mock_meta(), sizeof(before)));
+                }
+            }
+        }
+    }
+    puts("PASS: all seven ISR entries independently validated in A/B; boundaries, alignment, HIGH/other-slot and upper bits rejected");
+}
+
 static void transfer(void)
 {
     fresh(BOOT_SLOT_A);
@@ -321,6 +359,7 @@ int main(int argc, char **argv)
     }
     assert(fgetc(file) == EOF); fclose(file);
     init_cases();
+    isr_entry_cases();
     finalization_cases();
     puts("ALL OFFLINE OTA TESTS PASS");
     return 0;

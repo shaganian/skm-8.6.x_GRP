@@ -1,6 +1,7 @@
 #include <intrinsics.h>
 #include "../app_header.h"
 #include "../boot_control.h"
+#include "ota_crc32.h"
 #include "../boot_meta.h"
 //********************************************************************
 //  utilites.c
@@ -89,7 +90,6 @@ char MON_DS[7];
 extern unsigned char charge, ip[];            // флаг "ЗАРЯЖАТЬ ВНУТРЕННИЙ АККУМУЛЯТОР" 0-нет;1-да.
 extern calibr pit;                      // множитель значения Напряжения питания
 extern unsigned int rm_result;
-extern unsigned char iphex[3];
 extern unsigned char number;
 extern unsigned int c;
 //unsigned char RxMbuf.buf[300];
@@ -764,7 +764,7 @@ static void ota_resume_restore_once(void)
 }
 
 
-static unsigned long ota_crc32_region20(unsigned long crc,
+unsigned long ota_crc32_region20(unsigned long crc,
                                         unsigned long address,
                                         unsigned long size)
 {

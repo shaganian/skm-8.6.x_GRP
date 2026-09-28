@@ -5,6 +5,7 @@
 #include "app_header.h"
 #include "boot_meta.h"
 #include "boot_control.h"
+#include "drivers/ota_crc32.h"
 
 #define APP_A_HEADER_ADDR   0x5000u
 #define APP_B_HEADER_ADDR   0xA7C0u
@@ -32,34 +33,31 @@ uint8_t boot_get_current_slot(void)
  * record requires explicit recovery; FINISH must never repair it. */
 typedef char boot_meta_size_must_be_14[(sizeof(BootMeta) == 14u) ? 1 : -1];
 
-static uint32_t boot_image_crc_region(uint32_t crc, unsigned long address,
-                                      unsigned long length)
-{
-    unsigned char bit;
-    while (length-- != 0UL)
-    {
-        crc ^= (uint8_t)__data20_read_char(address++);
-        for (bit = 0u; bit < 8u; bit++)
-        {
-            crc = (crc >> 1) ^ ((crc & 1u) ? 0xEDB88320UL : 0UL);
-        }
-    }
-    return crc;
-}
+/* The byte-offset walk below must visit exactly these seven typed members. */
+#define BOOT_ISR_OFFSET(field, index) \
+    (offsetof(AppHeader, field) == offsetof(AppHeader, isr_port1) + \
+     (index) * sizeof(app_code_ptr_t))
+typedef char boot_isr_layout_must_be_contiguous[
+    (BOOT_ISR_OFFSET(isr_port2, 1u) && BOOT_ISR_OFFSET(isr_port3, 2u) &&
+     BOOT_ISR_OFFSET(isr_wdt, 3u) && BOOT_ISR_OFFSET(isr_usci_a0, 4u) &&
+     BOOT_ISR_OFFSET(isr_usci_b0, 5u) && BOOT_ISR_OFFSET(isr_adc12, 6u) &&
+     BOOT_ISR_OFFSET(image_size, 7u)) ? 1 : -1];
+#undef BOOT_ISR_OFFSET
 
-static uint8_t boot_current_image_valid(void)
+static uint8_t boot_valid_current_slot(void)
 {
     uint8_t slot = boot_get_current_slot();
     unsigned long entry = (unsigned long)g_app_header.entry;
     unsigned long low;
     unsigned long high;
     uint32_t crc;
+    unsigned int offset;
 
     if ((g_app_header.magic != APP_HEADER_MAGIC) ||
         (g_app_header.format_version != APP_HEADER_FORMAT_VERSION_V2) ||
         (g_app_header.image_size != APP_IMAGE_PAYLOAD_SIZE))
     {
-        return 0u;
+        return BOOT_SLOT_NONE;
     }
     if (slot == BOOT_SLOT_A)
     {
@@ -71,32 +69,32 @@ static uint8_t boot_current_image_valid(void)
         low = 0xA8C0UL;
         high = 0x11FFCUL;
     }
-    else return 0u;
+    else return BOOT_SLOT_NONE;
 
     if ((entry & 1UL) != 0UL ||
         !((entry >= low && entry < low + 0x56C0UL) ||
-          (entry >= high && entry < high + 0x1FFCUL))) return 0u;
+          (entry >= high && entry < high + 0x1FFCUL))) return BOOT_SLOT_NONE;
 
     /* Payload CRC excludes the header, so validate vector addresses too.
      * Boot dispatch requires every ISR to be in this slot's LOW region. */
-#define BOOT_ISR_VALID(field) \
-    (((unsigned long)g_app_header.field & 1UL) == 0UL && \
-     (unsigned long)g_app_header.field >= low && \
-     (unsigned long)g_app_header.field < low + 0x56C0UL)
-    if (!BOOT_ISR_VALID(isr_port1) || !BOOT_ISR_VALID(isr_port2) ||
-        !BOOT_ISR_VALID(isr_port3) || !BOOT_ISR_VALID(isr_wdt) ||
-        !BOOT_ISR_VALID(isr_usci_a0) || !BOOT_ISR_VALID(isr_usci_b0) ||
-        !BOOT_ISR_VALID(isr_adc12)) return 0u;
-#undef BOOT_ISR_VALID
+    for (offset = offsetof(AppHeader, isr_port1);
+         offset < offsetof(AppHeader, image_size);
+         offset += sizeof(app_code_ptr_t))
+    {
+        /* Walk the containing object's bytes, not an array of struct members. */
+        entry = (unsigned long)*(const app_code_ptr_t *)(
+            (const unsigned char *)&g_app_header + offset);
+        if ((entry & 1UL) != 0UL ||
+            entry < low || entry >= low + 0x56C0UL) return BOOT_SLOT_NONE;
+    }
 
-    crc = boot_image_crc_region(0xFFFFFFFFUL, low, 0x56C0UL);
-    crc = boot_image_crc_region(crc, high, 0x1FFCUL) ^ 0xFFFFFFFFUL;
-    return crc == g_app_header.image_crc32;
+    crc = ota_crc32_region20(0xFFFFFFFFUL, low, 0x56C0UL);
+    crc = ota_crc32_region20(crc, high, 0x1FFCUL) ^ 0xFFFFFFFFUL;
+    return crc == g_app_header.image_crc32 ? slot : BOOT_SLOT_NONE;
 }
 
-static uint8_t boot_meta_consistent(const volatile BootMeta *meta)
+static uint8_t boot_meta_consistent(const volatile BootMeta *meta, uint8_t current)
 {
-    uint8_t current = boot_get_current_slot();
     return current != BOOT_SLOT_NONE &&
         meta->magic == BOOT_META_MAGIC &&
         meta->format_version == BOOT_META_FORMAT_VERSION &&
@@ -122,11 +120,13 @@ uint8_t boot_prepare_ota(void)
     const uint8_t *bytes;
     unsigned int i;
 
-    if (!boot_current_image_valid())
+    uint8_t current = boot_valid_current_slot();
+
+    if (current == BOOT_SLOT_NONE)
     {
         return 0u;
     }
-    if (boot_meta_consistent(meta))
+    if (boot_meta_consistent(meta, current))
     {
         /* Do not overwrite a pending update or a trial boot. */
         return meta->pending_slot == BOOT_SLOT_NONE;
@@ -142,7 +142,7 @@ uint8_t boot_prepare_ota(void)
 
     initial.magic = BOOT_META_MAGIC;
     initial.format_version = BOOT_META_FORMAT_VERSION;
-    initial.active_slot = boot_get_current_slot();
+    initial.active_slot = current;
     initial.pending_slot = BOOT_SLOT_NONE;
     initial.flags = 0u;
     initial.sequence = 0u;
@@ -167,7 +167,7 @@ uint8_t boot_prepare_ota(void)
         if ((uint8_t)__data20_read_char(
                 (unsigned long)BOOT_META_ADDR + i) != bytes[i]) return 0u;
     }
-    return boot_meta_consistent(meta) &&
+    return boot_meta_consistent(meta, current) &&
         meta->pending_slot == BOOT_SLOT_NONE;
 }
 
@@ -178,10 +178,12 @@ uint8_t boot_set_pending(uint8_t slot)
     uint16_t sequence;
     const uint8_t *bytes;
 
+    uint8_t current = boot_valid_current_slot();
+
     /* Validation only: never initialize or repair metadata at FINISH. */
-    if (!boot_current_image_valid() || !boot_meta_consistent(meta) ||
+    if (current == BOOT_SLOT_NONE || !boot_meta_consistent(meta, current) ||
         (slot != BOOT_SLOT_A && slot != BOOT_SLOT_B) ||
-        slot == boot_get_current_slot()) return 0u;
+        slot == current) return 0u;
     if (meta->pending_slot == slot) return 1u; /* No repeated writes. */
     if (meta->pending_slot != BOOT_SLOT_NONE) return 0u;
 
@@ -194,7 +196,7 @@ uint8_t boot_set_pending(uint8_t slot)
     }
     /* pending_slot is the commit marker, written last and read back. */
     if (!boot_write_byte(offsetof(BootMeta, pending_slot), slot)) return 0u;
-    return boot_meta_consistent(meta) && meta->pending_slot == slot &&
+    return boot_meta_consistent(meta, current) && meta->pending_slot == slot &&
         meta->sequence == sequence;
 }
 

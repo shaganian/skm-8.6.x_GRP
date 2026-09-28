@@ -115,7 +115,7 @@
                         </toolChain>
                     </folderInfo>
                     <sourceEntries>
-                        <entry excluding="lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c|tests/ota" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                     </sourceEntries>
                 </configuration>
             </storageModule>
@@ -226,8 +226,13 @@
                             </tool>
                         </toolChain>
                     </folderInfo>
+                    <fileInfo id="com.ti.ccstudio.buildDefinitions.MSP430.Release.804177379.optfile1" name="utilites.c" resourcePath="drivers/utilites.c" toolsToInvoke="opt.compiler.1">
+                        <tool id="opt.compiler.1" name="MSP430 Compiler" superClass="com.ti.ccstudio.buildDefinitions.MSP430_21.6.exe.compilerRelease.921509056">
+                            <option id="opt.level.1" superClass="com.ti.ccstudio.buildDefinitions.MSP430_21.6.compilerID.OPT_LEVEL" value="com.ti.ccstudio.buildDefinitions.MSP430_21.6.compilerID.OPT_LEVEL.3" valueType="enumerated"/>
+                        </tool>
+                    </fileInfo>
                     <sourceEntries>
-                        <entry excluding="lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c|lnk_msp430fr5949.cmd|lnk_msp430fr5949_slot_b.cmd" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="lnk_msp430fr5959.cmd|msp430fr59xx_wdt_05.c|lnk_msp430fr5949.cmd|lnk_msp430fr5949_slot_b.cmd|tests/ota" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                     </sourceEntries>
                 </configuration>
             </storageModule>

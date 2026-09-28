@@ -492,10 +492,8 @@ unsigned long Atol(unsigned char *str, char base);
 void LTOA(unsigned long byData, u_char *buf);
 void LtoDecA(unsigned long Dec, unsigned char *str);
 void LtoDecA_sh(unsigned long Dec, unsigned char *str);
-void IPdecToHex(unsigned char* str,unsigned char* out);
 
 u_char MakeLRC(u_char *buffer, u_char len);
-u_char C2D(u_char c);
 u_char D2C(char c);
 //int cmp_str(const char * s, unsigned char *buf );
 unsigned int cmp_str(const char *string, unsigned char *buf);

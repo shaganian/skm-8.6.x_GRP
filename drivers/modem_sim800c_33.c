@@ -56,7 +56,6 @@ extern  unsigned int dataplace;
 //
 extern unsigned char start_init_job;            // флаг "НАЧАТЬ РАБОТУ"
 extern unsigned char ipdec[12];    // IP адреса для тестування
-extern unsigned char iphex[3];
 //extern uint8_t encrdata[272];
 //extern U8 decrdata[272];
 extern unsigned int lenreq,lenhead,lendata;
@@ -618,7 +617,6 @@ gprs_recover_cstt:
                      }
                      __no_operation();
 
-                     IPdecToHex(ipdec,iphex); //Формуємо ключ з ІР-адреси. Він у iphex[]
                      i2c_SetAddress(100,LINE6); i2c_PutStr("OK 5 ");
 
                      try = 0;                           // обнуляем попытки
@@ -822,27 +820,7 @@ ota_next_tcp:
      for(i=0; i < 512; i++) RxMbuf.buf[i] = 0;
      RxMbuf.ind = 0;
 
-     if(server==0) Send_from_UART0("AT+CIPSTART=\"TCP\",\"www.skydom.info");        // СКАЙДОМ:
-else if(server==1) Send_from_UART0("AT+CIPSTART=\"TCP\",\"sky.kgaz.com.ua");        // КРЕМЕНЧУКГАЗ:
-//else if(server==1) Send_from_UART0("AT+CIPSTART=\"TCP\",\"193.109.249.254");      // КРЕМЕНЧУКГАЗ:
-else if(server==2) Send_from_UART0("AT+CIPSTART=\"TCP\",\"metro.gazbil.ks.ua");     // ХЕРСОНГАЗ:
-else if(server==3) Send_from_UART0("AT+CIPSTART=\"TCP\",\"sky.kirgas.com");         // КІРОВОГРАДГАЗ:
-//else if(server==4) Send_from_UART0("AT+CIPSTART=\"TCP\",\"grmu.skydom.info");       // сервер grmu.skydom.info        СКАЙДОМ
-else if(server==4) Send_from_UART0("AT+CIPSTART=\"TCP\",\"78.27.235.144");          // сервер skydom
-else if(server==5) Send_from_UART0("AT+CIPSTART=\"TCP\",\"grmu-skydom.grmu.com.ua");// сервер ГАЗМЕРЕЖІ УКРАЇНИ
-//else if(server==5) Send_from_UART0("AT+CIPSTART=\"TCP\",\"185.2.109.40");         // сервер ГАЗМЕРЕЖІ УКРАЇНИ
-else if(server==6) Send_from_UART0("AT+CIPSTART=\"TCP\",\"31.42.179.214");          // сервер Шепетівкагаз
-
-     if(server==3){
-         Send_from_UART0("\",\"8181\"\r\n");  // открываем соединение:
-     }
-     else if(server==4 || server==5 || server==6){
-         //Send_from_UART0("\",\"61003\"\r\n");  // открываем соединение:
-         Send_from_UART0("\",\"46104\"\r\n");  // открываем соединение:
-     }
-     else{
-         Send_from_UART0("\",\"80\"\r\n");  // открываем соединение:
-     }
+     Send_from_UART0("AT+CIPSTART=\"TCP\",\"78.27.235.144\",\"46104\"\r\n");
 //
 
     i2c_SetAddress(100,LINE6); i2c_PutStr("OK 6 ");

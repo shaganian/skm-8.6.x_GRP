@@ -84,7 +84,7 @@ def main():
     harness = (root / "tests/ota/offline_test.c").read_text()
     source = harness.replace("/* GENERATED_HEADERS */", header + meta)
     source = source.replace("/* GENERATED_PRODUCTION_CODE */", "\n".join([
-        abi(boot), function(util, "hex_nibble"), abi(ota), reset_gate,
+        abi((root / "drivers/ota_crc32.h").read_text()), abi(boot), function(util, "hex_nibble"), abi(ota), reset_gate,
     ]))
     with tempfile.TemporaryDirectory(prefix="skm-ota-offline-") as directory:
         test = Path(directory) / "test.c"

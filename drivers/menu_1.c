@@ -335,12 +335,14 @@ void kbd_process(void)
 void LCDcls(void)
 {
     unsigned char i, j;
-    //for(i=0;i<8;i++)
-    for (i = 8; i > 0; i--)
+
+    for (i = 0; i < 8; i++)
     {
-        //for(j=0;j<22;j++)
-        for (j = 22; j > 0; j--)
+        for (j = 0; j < 21; j++)
+        {
             LCDbuffer[i][j] = ' ';
+        }
+
         LCDbuffer[i][21] = 0;
     }
 }

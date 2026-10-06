@@ -381,6 +381,7 @@ unsigned char index;
 unsigned char connected;
 unsigned long ota_session_start_received;
 unsigned char gprs_recover_try = 0;
+unsigned char ota_error_ack_retry = 0u;
 unsigned int lenreq,i,remote_payload_start;//
 unsigned int remote_payload_hex_len;
 unsigned int aes_block;
@@ -818,8 +819,8 @@ else if(server==6) Send_from_UART0("AT+CIPSTART=\"TCP\",\"31.42.179.214");      
          Send_from_UART0("\",\"8181\"\r\n");  // открываем соединение:
      }
      else if(server==4 || server==5 || server==6){
-         //Send_from_UART0("\",\"61003\"\r\n");  // открываем соединение:
-         Send_from_UART0("\",\"46104\"\r\n");  // открываем соединение:
+         Send_from_UART0("\",\"61003\"\r\n");  // открываем соединение:
+         //Send_from_UART0("\",\"46104\"\r\n");  // открываем соединение:
      }
      else{
          Send_from_UART0("\",\"80\"\r\n");  // открываем соединение:
@@ -1123,6 +1124,36 @@ if(!connected){
 
                 // Устанавливаем время интервалов между передачами на сервер
                 result_remote_command = parse_remote_command();
+
+                /*
+                 * OTA ERROR ACK.
+                 *
+                 * Якщо щойно прийнята OTA-команда завершилась
+                 * помилкою (наприклад CRC16 chunk), сервер ще
+                 * не знає про status=0x80.
+                 *
+                 * Відкриваємо рівно один додатковий TCP-сеанс.
+                 * httpreq_smart() перебудує payload і передасть
+                 * поточний &o=80RRRRRRRR.
+                 *
+                 * Одноразовий прапорець захищає від нескінченного
+                 * циклу у випадку проблем із сервером.
+                 */
+                if ((ota_get_status() == 0x80u) &&
+                    (ota_error_ack_retry == 0u))
+                {
+                    ota_error_ack_retry = 1u;
+
+                    for (i = 0; i < 512; i++)
+                    {
+                        RxMbuf.buf[i] = 0;
+                    }
+                    RxMbuf.ind = 0;
+
+                    delay_ms(5000);
+
+                    goto ota_next_tcp;
+                }
 
                 /*
                  * OTA READY вже був переданий серверу саме

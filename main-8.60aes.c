@@ -147,6 +147,20 @@ unsigned char skip_alarm_after_transmit;
  *        sens.v[1].dat = ADC12MEM31; // значение напряжения питания MSP430FR
  *
  */
+/*
+ * Persistent layout compatibility with deployed SKM-8 8.6.x firmware.
+ *
+ * Historical firmware stored crc8_table[256] at 0x4400-0x44FF
+ * in .TI.persistent.  crc8_table is no longer persistent, but this
+ * reserved block MUST remain here so that all existing persistent
+ * configuration keeps its original FRAM addresses after OTA.
+ *
+ * DO NOT REMOVE OR RESIZE without a persistent-data migration.
+ */
+#pragma PERSISTENT(persistent_layout_compat_v86)
+#pragma RETAIN(persistent_layout_compat_v86)
+unsigned char persistent_layout_compat_v86[0x100] = {0};
+
 #pragma PERSISTENT(sens)
 struct {
     sens_str a[8];  // Аналоговые входы устройства
